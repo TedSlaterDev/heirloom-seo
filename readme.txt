@@ -7,7 +7,7 @@ Requires PHP: 8.1
 Stable tag: 0.7.7
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
-
+ 
 Lean, fast SEO essentials — meta tags, Open Graph, schema, sitemaps, IndexNow — without the bloat.
 
 == Description ==
