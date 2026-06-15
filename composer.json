@@ -1,0 +1,45 @@
+{
+	"name": "orchard-grove-media/heirloom-seo",
+	"description": "Lean, fast SEO essentials for WordPress — meta, schema, sitemaps, IndexNow, without the bloat.",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"authors": [
+		{
+			"name": "Orchard Grove Media, LLC",
+			"homepage": "https://orchardgrove.com/"
+		}
+	],
+	"require": {
+		"php": ">=8.1",
+		"ext-dom": "*",
+		"ext-mbstring": "*"
+	},
+	"require-dev": {
+		"squizlabs/php_codesniffer": "^3.9",
+		"wp-coding-standards/wpcs": "^3.1",
+		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+		"phpunit/phpunit": "^10.5",
+		"brain/monkey": "^2.6"
+	},
+	"autoload": {
+		"psr-4": {
+			"OrchardGrove\\HeirloomSeo\\": "src/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"OrchardGrove\\HeirloomSeo\\Tests\\": "tests/"
+		}
+	},
+	"config": {
+		"allow-plugins": {
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	},
+	"scripts": {
+		"lint": "phpcs",
+		"fix": "phpcbf",
+		"test": "phpunit"
+	}
+}
