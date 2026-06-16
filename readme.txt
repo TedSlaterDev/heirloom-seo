@@ -42,6 +42,10 @@ The edge is speed and focus, not feature count — fast for visitors *and* edito
 
 Heirloom is narrower than the all-in-one suites by design — no content-analysis scoring, keyword tools, or redirect manager. It's faster because it does only the SEO essentials, which for most sites is the part that actually moves rankings and sharing.
 
+= Support =
+
+Questions, bug reports, and feature requests are welcome — email **ted@heirloomseo.com**, or open an issue on GitHub at https://github.com/TedSlaterDev/heirloom-seo/issues.
+
 == Installation ==
 
 1. Upload the `heirloom-seo` folder to `/wp-content/plugins/`.
@@ -70,7 +74,7 @@ changes via the sitemap and Search Console.
 == Changelog ==
 
 = 0.7.10 =
-* Added a "Support & feedback" panel to the settings sidebar — email the developer, or report a bug / request a feature on GitHub. No tracking and no phone-home; it's just two links.
+* New ways to get help: a "Support & feedback" panel in the settings sidebar, a "Support" link on the Plugins screen, and a Support note in the readme — email the developer, or report a bug / request a feature on GitHub. Static links only; no tracking or phone-home.
 
 = 0.7.9 =
 * llms.txt polish: leads with a UTF-8 BOM so curly quotes and punctuation render correctly when a server sends the file as text/plain without a charset (nginx); titles now decode HTML entities (&#8216; → ‘); and Page/Post descriptions are built from the raw content — no "Read more", print-link, or other theme/plugin chrome — and trimmed to a concise length.

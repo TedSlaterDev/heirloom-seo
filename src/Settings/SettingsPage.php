@@ -47,6 +47,7 @@ final class SettingsPage implements ModuleInterface {
 		add_action( 'admin_post_heirloom_seo_import_settings', [ $this, 'handleImport' ] );
 		add_action( 'admin_notices', [ $this, 'conflictNotice' ] );
 		add_filter( 'plugin_action_links_' . HEIRLOOM_SEO_BASENAME, [ $this, 'actionLinks' ] );
+		add_filter( 'plugin_row_meta', [ $this, 'rowMeta' ], 10, 2 );
 	}
 
 	/**
@@ -145,6 +146,22 @@ final class SettingsPage implements ModuleInterface {
 	public function actionLinks( array $links ): array {
 		$url = admin_url( 'admin.php?page=' . self::PAGE );
 		array_unshift( $links, '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Settings', 'heirloom-seo' ) . '</a>' );
+		return $links;
+	}
+
+	/**
+	 * Add a "Support" link to the plugin's row meta on the Plugins screen.
+	 *
+	 * Fires for every plugin, so guard on the plugin file.
+	 *
+	 * @param string[] $links Existing row-meta links.
+	 * @param string   $file  Plugin file this row meta is being rendered for.
+	 * @return string[]
+	 */
+	public function rowMeta( array $links, string $file ): array {
+		if ( HEIRLOOM_SEO_BASENAME === $file ) {
+			$links[] = '<a href="https://github.com/TedSlaterDev/heirloom-seo/issues" target="_blank" rel="noopener">' . esc_html__( 'Support', 'heirloom-seo' ) . '</a>';
+		}
 		return $links;
 	}
 
