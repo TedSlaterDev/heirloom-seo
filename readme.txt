@@ -8,30 +8,39 @@ Stable tag: 0.7.9
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
-Lean, fast SEO essentials — meta tags, Open Graph, schema, sitemaps, IndexNow — without the bloat.
+Lean, fast SEO essentials — titles, Open Graph, schema, sitemaps, IndexNow, llms.txt — with zero front-end bloat.
 
 == Description ==
 
-Heirloom SEO does the high-leverage SEO work and nothing else. No in-editor
-analysis scripts, no telemetry, no upsell nags, and zero CSS or JavaScript on
-the front end — the only thing it adds to your pages is the markup in the
-`<head>`.
+Heirloom SEO does the high-leverage SEO and social-sharing work, and nothing
+else. No in-editor analysis scripts, no telemetry, no upsell nags, and **zero
+CSS or JavaScript on the front end** — the only thing it adds to your pages is
+the markup in the `<head>`. Built for PHP 8.1+ with no build step.
 
-**Features**
+**Main features**
 
-* Title and meta-description templates with per-post overrides
-* Open Graph and Twitter (X) cards, with smart image fallbacks
-* Self-referencing canonical URLs on every page type
-* Robots controls (per-post and per-archive noindex, `max-image-preview`, etc.) and a virtual robots.txt
-* A connected schema.org `@graph` — WebSite, Organization/Person (with address, sameAs, optional LocalBusiness), WebPage, Article/NewsArticle, BreadcrumbList, optional WooCommerce Product, and a per-post JSON-LD escape hatch
-* XML sitemap at `/sitemap.xml` (replaces core's), with image entries and file caching
-* Google News sitemap at `/news-sitemap.xml` for posts in the "News" category or tag
-* IndexNow submission to Bing/Yandex on publish and update
-* Attachment-page redirects (to the parent post or the file)
-* RSS attribution for scraper canonicalization
-* Breadcrumbs (shortcode, template tag, and BreadcrumbList schema)
-* AI tab — llms.txt, AI-crawler controls (block GPTBot, ClaudeBot, Google-Extended, …), and opt-in signals (noai, TDM reservation, ai.txt)
-* Optional head cleanup (generator, RSD, wlwmanifest, shortlink, …)
+* Title and meta-description templates per content type (separate Posts and Pages), with per-post overrides
+* Open Graph and Twitter (X) cards, with smart image fallbacks and per-network sizing (Facebook 1200×630, X 1600×900)
+* Self-referencing canonical URLs on every page type, plus a filter so syndicated content can point to its source
+* Robots controls (per-post and per-archive noindex, `max-image-preview`, …) and a virtual robots.txt
+* A connected schema.org `@graph` — WebSite, Organization/Person (address, sameAs, optional LocalBusiness), WebPage, Article/NewsArticle, BreadcrumbList, optional WooCommerce Product, and a per-post JSON-LD escape hatch
+* XML sitemap at `/sitemap.xml` (replaces core's; image entries, file-cached) plus a Google News sitemap at `/news-sitemap.xml`
+* IndexNow submission to Bing, Yandex, Seznam, and Naver on publish and update
+* A real `/llms.txt` for AI (curated, with hand-picked pages, served as a static file) and AI-crawler controls (block GPTBot, ClaudeBot, Google-Extended, …)
+* One-click, non-destructive migration from Yoast, Rank Math, All in One SEO, and The SEO Framework — plus WP-CLI
+* An SEO Health audit and JSON settings export/import — with breadcrumbs, attachment redirects, RSS attribution, and optional head cleanup
+
+= Why Heirloom may outrun heavier SEO plugins =
+
+The edge is speed and focus, not feature count — fast for visitors *and* editors:
+
+* **Zero front-end CSS/JS.** Heirloom enqueues nothing on your pages, so it never touches render time or Core Web Vitals.
+* **No editor bloat.** A classic PHP metabox instead of a heavy in-editor JavaScript analysis bundle.
+* **Tiny database footprint.** One autoloaded option, per-post meta only when you customize a post, and no custom tables — proven on a 190,000-post site.
+* **Cached, server-light output.** Sitemaps and schema are file-cached and chunked, so big sites never build giant responses on the fly.
+* **You only pay for what you use.** Disabled features register no hooks; there are no telemetry calls, nags, or dashboard widgets.
+
+Heirloom is narrower than the all-in-one suites by design — no content-analysis scoring, keyword tools, or redirect manager. It's faster because it does only the SEO essentials, which for most sites is the part that actually moves rankings and sharing.
 
 == Installation ==
 
