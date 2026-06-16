@@ -10,6 +10,18 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 
 $heirloom_seo_option = get_option( 'heirloom_seo', [] );
 
+// The generated /llms.txt is a public serving artifact, not user data — remove it
+// regardless of the data-deletion opt-in (deactivation usually handled it already).
+// Use the path recorded at write time so a filtered (subdirectory) docroot is honored.
+$heirloom_seo_llms = get_option( 'heirloom_seo_llms_static_path' );
+if ( is_string( $heirloom_seo_llms ) && '' !== $heirloom_seo_llms && is_file( $heirloom_seo_llms ) ) {
+	@unlink( $heirloom_seo_llms ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
+}
+delete_option( 'heirloom_seo_llms_static' );
+delete_option( 'heirloom_seo_llms_static_path' );
+delete_option( 'heirloom_seo_llms_static_failed' );
+delete_option( 'heirloom_seo_llms_dirty' );
+
 if ( ! is_array( $heirloom_seo_option ) || empty( $heirloom_seo_option['advanced']['delete_data_on_uninstall'] ) ) {
 	return;
 }

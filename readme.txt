@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.7
+Stable tag: 0.7.9
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -59,6 +59,12 @@ Bing, Yandex, Seznam, and Naver. Google does not use IndexNow; it discovers
 changes via the sitemap and Search Console.
 
 == Changelog ==
+
+= 0.7.9 =
+* llms.txt polish: leads with a UTF-8 BOM so curly quotes and punctuation render correctly when a server sends the file as text/plain without a charset (nginx); titles now decode HTML entities (&#8216; → ‘); and Page/Post descriptions are built from the raw content — no "Read more", print-link, or other theme/plugin chrome — and trimmed to a concise length.
+
+= 0.7.8 =
+* llms.txt now serves at the standard /llms.txt (no trailing slash) on servers that hand .txt requests to static files (e.g. nginx) by writing a real file at the site root — the way Yoast does. It's regenerated when content changes and removed when you turn llms.txt off or delete the plugin. Falls back to the dynamic route (and shows a notice) when the site root isn't writable, already contains a non-Heirloom llms.txt, or on multisite. The file we manage is tracked so we never delete one you created.
 
 = 0.7.7 =
 * AI tab: llms.txt can now list a hand-picked set of Pages (About / Contact / Terms / Privacy / Shop named slots + additional pages) instead of all pages — posts stay automatic. Set Pages to "Only the pages I choose."

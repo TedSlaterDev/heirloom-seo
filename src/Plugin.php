@@ -11,6 +11,7 @@ use OrchardGrove\HeirloomSeo\Modules\Breadcrumbs\Breadcrumbs;
 use OrchardGrove\HeirloomSeo\Modules\Cleanup\Cleanup;
 use OrchardGrove\HeirloomSeo\Modules\Feed\RssAttribution;
 use OrchardGrove\HeirloomSeo\Modules\Ai\Ai;
+use OrchardGrove\HeirloomSeo\Modules\Ai\LlmsTxt;
 use OrchardGrove\HeirloomSeo\Modules\IndexNow\IndexNow;
 use OrchardGrove\HeirloomSeo\Modules\Media\Media;
 use OrchardGrove\HeirloomSeo\Modules\Meta\Meta;
@@ -99,12 +100,15 @@ final class Plugin {
 		}
 
 		// On version change, re-flush rewrites and clear cached sitemaps so new
-		// routes and output-format changes take effect without reactivation.
-		if ( get_option( 'heirloom_seo_version' ) !== HEIRLOOM_SEO_VERSION ) {
+		// routes and output-format changes take effect without reactivation. Gated
+		// to back-end requests so none of this (DB writes, file ops) hits the front end.
+		if ( ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) )
+			&& get_option( 'heirloom_seo_version' ) !== HEIRLOOM_SEO_VERSION ) {
 			update_option( 'heirloom_seo_version', HEIRLOOM_SEO_VERSION );
 			update_option( 'heirloom_seo_needs_flush', '1' );
 			FileCache::purge();
 			$this->migrate();
+			LlmsTxt::markDirty(); // refresh the physical /llms.txt after an update
 		}
 
 		add_action( 'init', [ $this, 'maybeFlushRewrites' ], 99 );
@@ -161,10 +165,12 @@ final class Plugin {
 		( new Options() )->seedDefaults();
 		FileCache::ensureDir();
 		update_option( 'heirloom_seo_needs_flush', '1' );
+		LlmsTxt::markDirty();
 	}
 
 	public static function deactivate(): void {
 		flush_rewrite_rules( false );
 		delete_option( 'heirloom_seo_needs_flush' );
+		LlmsTxt::onDeactivate();
 	}
 }
