@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.10
+Stable tag: 0.7.11
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -72,6 +72,9 @@ Bing, Yandex, Seznam, and Naver. Google does not use IndexNow; it discovers
 changes via the sitemap and Search Console.
 
 == Changelog ==
+
+= 0.7.11 =
+* New leaf icon for the admin menu and the settings header (replacing the search and palm-tree icons) — a consistent brand mark now shared by the plugin, the website, and the social-share card.
 
 = 0.7.10 =
 * New ways to get help: a "Support & feedback" panel in the settings sidebar, a "Support" link on the Plugins screen, and a Support note in the readme — email the developer, or report a bug / request a feature on GitHub. Static links only; no tracking or phone-home.

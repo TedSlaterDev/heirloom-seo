@@ -98,8 +98,7 @@
 	border: 1px solid #d7e6cc;
 	color: #4b7a3f;
 }
-.hseo-mark .dashicons {
-	font-size: 26px;
+.hseo-mark svg {
 	width: 26px;
 	height: 26px;
 }

@@ -94,7 +94,7 @@ final class SettingsPage implements ModuleInterface {
 			'manage_options',
 			self::PAGE,
 			[ $this, 'renderPage' ],
-			'dashicons-search',
+			'data:image/svg+xml;base64,' . base64_encode( '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path fill="#a7aaad" d="M53 11C26 13 13 27 11 53c26-2 40-15 42-42z"/></svg>' ),
 			80
 		);
 	}
@@ -190,7 +190,7 @@ final class SettingsPage implements ModuleInterface {
 		<div class="wrap hseo-settings">
 			<div class="hseo-header">
 				<div class="hseo-brand">
-					<span class="hseo-mark" aria-hidden="true"><span class="dashicons dashicons-palmtree"></span></span>
+					<span class="hseo-mark" aria-hidden="true"><svg viewBox="0 0 64 64" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M53 11C26 13 13 27 11 53c26-2 40-15 42-42z"/></svg></span>
 					<div class="hseo-brand-text">
 						<h1><?php esc_html_e( 'Heirloom SEO', 'heirloom-seo' ); ?></h1>
 						<p class="hseo-tagline"><?php esc_html_e( 'Lean, fast SEO essentials — by Orchard Grove Media', 'heirloom-seo' ); ?></p>
