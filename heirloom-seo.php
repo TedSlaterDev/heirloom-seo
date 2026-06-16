@@ -3,7 +3,7 @@
  * Plugin Name:       Heirloom SEO
  * Plugin URI:        https://orchardgrove.com/
  * Description:       Lean, fast SEO essentials — meta tags, Open Graph, schema, sitemaps, IndexNow — without the bloat.
- * Version:           0.7.9
+ * Version:           0.7.10
  * Requires PHP:      8.1
  * Requires at least: 6.0
  * Author:            Orchard Grove Media, LLC
@@ -22,7 +22,7 @@ namespace OrchardGrove\HeirloomSeo;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'HEIRLOOM_SEO_VERSION', '0.7.9' );
+define( 'HEIRLOOM_SEO_VERSION', '0.7.10' );
 define( 'HEIRLOOM_SEO_FILE', __FILE__ );
 define( 'HEIRLOOM_SEO_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HEIRLOOM_SEO_URL', plugin_dir_url( __FILE__ ) );

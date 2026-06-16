@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.9
+Stable tag: 0.7.10
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -68,6 +68,9 @@ Bing, Yandex, Seznam, and Naver. Google does not use IndexNow; it discovers
 changes via the sitemap and Search Console.
 
 == Changelog ==
+
+= 0.7.10 =
+* Added a "Support & feedback" panel to the settings sidebar — email the developer, or report a bug / request a feature on GitHub. No tracking and no phone-home; it's just two links.
 
 = 0.7.9 =
 * llms.txt polish: leads with a UTF-8 BOM so curly quotes and punctuation render correctly when a server sends the file as text/plain without a charset (nginx); titles now decode HTML entities (&#8216; → ‘); and Page/Post descriptions are built from the raw content — no "Read more", print-link, or other theme/plugin chrome — and trimmed to a concise length.

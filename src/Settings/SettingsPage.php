@@ -263,6 +263,15 @@ final class SettingsPage implements ModuleInterface {
 				<?php esc_html_e( 'by Orchard Grove Media, LLC', 'heirloom-seo' ); ?>
 			</p>
 		</div>
+
+		<div class="hseo-card hseo-aside">
+			<h2><?php esc_html_e( 'Support & feedback', 'heirloom-seo' ); ?></h2>
+			<ul class="hseo-links">
+				<li><a href="<?php echo esc_url( 'mailto:ted@heirloomseo.com' ); ?>"><span class="dashicons dashicons-email" aria-hidden="true"></span><?php esc_html_e( 'Email the developer', 'heirloom-seo' ); ?></a></li>
+				<li><a href="https://github.com/TedSlaterDev/heirloom-seo/issues" target="_blank" rel="noopener"><span class="dashicons dashicons-sos" aria-hidden="true"></span><?php esc_html_e( 'Report a bug or request a feature', 'heirloom-seo' ); ?></a></li>
+			</ul>
+			<p class="hseo-aside-foot"><?php esc_html_e( 'Questions or ideas? I read every message.', 'heirloom-seo' ); ?></p>
+		</div>
 		<?php
 	}
 
