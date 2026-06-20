@@ -395,22 +395,31 @@ final class Schema implements ModuleInterface {
 
 	/** @return array<string,mixed>|null */
 	private function breadcrumbList( Context $context, string $canonical ): ?array {
-		$trail = Breadcrumbs::trail( $context, $this->options );
+		$trail = array_values( Breadcrumbs::trail( $context, $this->options ) );
 		if ( count( $trail ) < 2 ) {
 			return null;
 		}
 
+		$last  = count( $trail ) - 1;
 		$items = [];
-		foreach ( array_values( $trail ) as $i => $crumb ) {
-			$item = [
-				'@type'    => 'ListItem',
-				'position' => $i + 1,
-				'name'     => $crumb['name'],
-			];
-			if ( ! empty( $crumb['url'] ) ) {
-				$item['item'] = $crumb['url'];
+		foreach ( $trail as $i => $crumb ) {
+			$url = $crumb['url'];
+			if ( '' === $url && $i === $last ) {
+				$url = $canonical; // the final crumb always resolves to the current page
 			}
-			$items[] = $item;
+			if ( '' === $url ) {
+				continue; // Google requires "item" on every ListItem — skip an unlinkable crumb rather than emit an invalid one
+			}
+			$items[] = [
+				'@type'    => 'ListItem',
+				'position' => count( $items ) + 1,
+				'name'     => $crumb['name'],
+				'item'     => $url,
+			];
+		}
+
+		if ( count( $items ) < 2 ) {
+			return null;
 		}
 
 		return [

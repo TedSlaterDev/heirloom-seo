@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.11
+Stable tag: 0.7.12
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -72,6 +72,9 @@ Bing, Yandex, Seznam, and Naver. Google does not use IndexNow; it discovers
 changes via the sitemap and Search Console.
 
 == Changelog ==
+
+= 0.7.12 =
+* Breadcrumbs schema now always emits the required `item` URL for every breadcrumb — the final crumb falls back to the page's canonical URL, and any crumb without a resolvable link is dropped rather than output without `item`. Fixes Google Search Console "Missing field 'item' (in 'itemListElement')" errors that could occur when a category/term link couldn't be resolved.
 
 = 0.7.11 =
 * New leaf icon for the admin menu and the settings header (replacing the search and palm-tree icons) — a consistent brand mark now shared by the plugin, the website, and the social-share card.
