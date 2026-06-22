@@ -83,8 +83,14 @@ final class Robots implements ModuleInterface {
 		if ( PageType::Search === $type && $this->options->bool( 'robots.noindex_search' ) ) {
 			return true;
 		}
-		if ( PageType::Author === $type && $this->options->bool( 'robots.noindex_author' ) ) {
-			return true;
+		if ( PageType::Author === $type ) {
+			if ( $this->options->bool( 'robots.noindex_author' ) ) {
+				return true;
+			}
+			$user = $context->user();
+			if ( $user && get_user_meta( $user->ID, 'heirloom_seo_noindex', true ) ) {
+				return true; // per-author "Hide from search engines" toggle (Edit User screen)
+			}
 		}
 		if ( PageType::Date === $type && $this->options->bool( 'robots.noindex_date' ) ) {
 			return true;

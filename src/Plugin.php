@@ -3,6 +3,7 @@ declare( strict_types=1 );
 
 namespace OrchardGrove\HeirloomSeo;
 
+use OrchardGrove\HeirloomSeo\Admin\AuthorFields;
 use OrchardGrove\HeirloomSeo\Admin\Metabox;
 use OrchardGrove\HeirloomSeo\Audit\Screen;
 use OrchardGrove\HeirloomSeo\Cli\Commands;
@@ -87,6 +88,7 @@ final class Plugin {
 		if ( is_admin() ) {
 			$modules[] = new SettingsPage( $o );
 			$modules[] = new Metabox( $o );
+			$modules[] = new AuthorFields();
 			$modules[] = new Ajax();
 			$modules[] = new Screen( $o );
 		}

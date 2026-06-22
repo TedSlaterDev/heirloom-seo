@@ -34,6 +34,9 @@ global $wpdb;
 $heirloom_seo_like = $wpdb->esc_like( '_heirloom_seo_' ) . '%';
 $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_key LIKE %s", $heirloom_seo_like ) ); // phpcs:ignore WordPress.DB
 
+// Per-author "hide from search engines" flag (Edit User screen).
+delete_metadata( 'user', 0, 'heirloom_seo_noindex', '', true );
+
 $heirloom_seo_uploads = wp_upload_dir();
 $heirloom_seo_dir     = trailingslashit( $heirloom_seo_uploads['basedir'] ) . 'heirloom-seo-cache';
 if ( is_dir( $heirloom_seo_dir ) ) {

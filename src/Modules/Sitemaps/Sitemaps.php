@@ -315,6 +315,7 @@ final class Sitemaps implements ModuleInterface {
 				'number'              => $per,
 				'offset'              => ( $page - 1 ) * $per,
 				'orderby'             => 'ID',
+				'meta_query'          => self::hiddenAuthorExclusion(),
 			]
 		);
 
@@ -587,7 +588,29 @@ XSL;
 	}
 
 	private function authorCount(): int {
-		return count( get_users( [ 'has_published_posts' => [ 'post' ], 'fields' => 'ID' ] ) );
+		return count(
+			get_users(
+				[
+					'has_published_posts' => [ 'post' ],
+					'fields'              => 'ID',
+					'meta_query'          => self::hiddenAuthorExclusion(),
+				]
+			)
+		);
+	}
+
+	/**
+	 * Authors flagged "Hide from search engines" (the heirloom_seo_noindex user
+	 * meta, set on the Edit User screen) are dropped from the author sitemap.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private static function hiddenAuthorExclusion(): array {
+		return [
+			'relation' => 'OR',
+			[ 'key' => 'heirloom_seo_noindex', 'compare' => 'NOT EXISTS' ],
+			[ 'key' => 'heirloom_seo_noindex', 'value' => '1', 'compare' => '!=' ],
+		];
 	}
 
 	/** @return string[] */

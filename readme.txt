@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.12
+Stable tag: 0.7.13
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -72,6 +72,9 @@ Bing, Yandex, Seznam, and Naver. Google does not use IndexNow; it discovers
 changes via the sitemap and Search Console.
 
 == Changelog ==
+
+= 0.7.13 =
+* New "Heirloom SEO" section on the Edit User (author) screen with a "Hide this author from search engines" toggle — adds a noindex tag to the author's archive and removes them from the XML sitemap. Handy for keeping staff, bot, or aggregate author accounts out of search. Admins only.
 
 = 0.7.12 =
 * Breadcrumbs schema now always emits the required `item` URL for every breadcrumb — the final crumb falls back to the page's canonical URL, and any crumb without a resolvable link is dropped rather than output without `item`. Fixes Google Search Console "Missing field 'item' (in 'itemListElement')" errors that could occur when a category/term link couldn't be resolved.
