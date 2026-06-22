@@ -5,6 +5,7 @@ namespace OrchardGrove\HeirloomSeo\Modules\Schema;
 
 use OrchardGrove\HeirloomSeo\Context;
 use OrchardGrove\HeirloomSeo\ModuleInterface;
+use OrchardGrove\HeirloomSeo\Modules\Authors\Authors;
 use OrchardGrove\HeirloomSeo\Modules\Breadcrumbs\Breadcrumbs;
 use OrchardGrove\HeirloomSeo\PageType;
 use OrchardGrove\HeirloomSeo\Settings\Options;
@@ -452,7 +453,9 @@ final class Schema implements ModuleInterface {
 			'headline'         => get_the_title( $post ),
 			'datePublished'    => $published ? $published->format( 'c' ) : '',
 			'dateModified'     => $modified ? $modified->format( 'c' ) : '',
-			'author'           => [ '@id' => $this->personId( $post ) ],
+			'author'           => Authors::isHidden( (int) $post->post_author )
+				? [ '@id' => home_url( '/' ) . '#organization' ]
+				: [ '@id' => $this->personId( $post ) ],
 			'publisher'        => [ '@id' => home_url( '/' ) . '#organization' ],
 			'inLanguage'       => get_bloginfo( 'language' ),
 			'wordCount'        => $this->wordCount( $post ),
@@ -484,8 +487,8 @@ final class Schema implements ModuleInterface {
 	/** @return array<string,mixed>|null */
 	private function authorPerson( WP_Post $post ): ?array {
 		$uid = (int) $post->post_author;
-		if ( ! $uid ) {
-			return null;
+		if ( ! $uid || Authors::isHidden( $uid ) ) {
+			return null; // hidden authors: no Person node (the article references the Organization instead)
 		}
 
 		$data = [

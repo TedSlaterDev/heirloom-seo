@@ -13,6 +13,7 @@ use OrchardGrove\HeirloomSeo\Modules\Cleanup\Cleanup;
 use OrchardGrove\HeirloomSeo\Modules\Feed\RssAttribution;
 use OrchardGrove\HeirloomSeo\Modules\Ai\Ai;
 use OrchardGrove\HeirloomSeo\Modules\Ai\LlmsTxt;
+use OrchardGrove\HeirloomSeo\Modules\Authors\Authors;
 use OrchardGrove\HeirloomSeo\Modules\IndexNow\IndexNow;
 use OrchardGrove\HeirloomSeo\Modules\Media\Media;
 use OrchardGrove\HeirloomSeo\Modules\Meta\Meta;
@@ -84,6 +85,7 @@ final class Plugin {
 			$modules[] = new RssAttribution( $o );
 		}
 		$modules[] = new Ai( $o );
+		$modules[] = new Authors( $o );
 
 		if ( is_admin() ) {
 			$modules[] = new SettingsPage( $o );

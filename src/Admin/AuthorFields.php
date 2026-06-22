@@ -4,6 +4,7 @@ declare( strict_types=1 );
 namespace OrchardGrove\HeirloomSeo\Admin;
 
 use OrchardGrove\HeirloomSeo\ModuleInterface;
+use OrchardGrove\HeirloomSeo\Modules\Authors\Authors;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
 use WP_User;
 
@@ -22,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class AuthorFields implements ModuleInterface {
 
-	private const META  = 'heirloom_seo_noindex';
+	private const META  = Authors::META;
 	private const NONCE = 'heirloom_seo_author_fields';
 
 	public function register(): void {

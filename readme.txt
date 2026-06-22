@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.13
+Stable tag: 0.7.14
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -72,6 +72,9 @@ Bing, Yandex, Seznam, and Naver. Google does not use IndexNow; it discovers
 changes via the sitemap and Search Console.
 
 == Changelog ==
+
+= 0.7.14 =
+* "Hide this author from search engines" now hides the author more completely: hidden authors are removed from the article schema (the post is attributed to the site/organization instead), their byline and author-archive link are replaced with the site name across the front end and feeds, and they are dropped from the public REST API users endpoint (the classic author-enumeration vector) for anonymous requests. Editors still see real authors in the dashboard. Note: a hardcoded theme byline that doesn't use WordPress's standard author functions may need a small theme tweak.
 
 = 0.7.13 =
 * New "Heirloom SEO" section on the Edit User (author) screen with a "Hide this author from search engines" toggle — adds a noindex tag to the author's archive and removes them from the XML sitemap. Handy for keeping staff, bot, or aggregate author accounts out of search. Admins only.

@@ -4,6 +4,7 @@ declare( strict_types=1 );
 namespace OrchardGrove\HeirloomSeo\Modules\Sitemaps;
 
 use OrchardGrove\HeirloomSeo\ModuleInterface;
+use OrchardGrove\HeirloomSeo\Modules\Authors\Authors;
 use OrchardGrove\HeirloomSeo\Settings\Options;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
 use WP_Post;
@@ -608,8 +609,8 @@ XSL;
 	private static function hiddenAuthorExclusion(): array {
 		return [
 			'relation' => 'OR',
-			[ 'key' => 'heirloom_seo_noindex', 'compare' => 'NOT EXISTS' ],
-			[ 'key' => 'heirloom_seo_noindex', 'value' => '1', 'compare' => '!=' ],
+			[ 'key' => Authors::META, 'compare' => 'NOT EXISTS' ],
+			[ 'key' => Authors::META, 'value' => '1', 'compare' => '!=' ],
 		];
 	}
 

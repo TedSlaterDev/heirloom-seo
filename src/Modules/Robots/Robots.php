@@ -5,6 +5,7 @@ namespace OrchardGrove\HeirloomSeo\Modules\Robots;
 
 use OrchardGrove\HeirloomSeo\Context;
 use OrchardGrove\HeirloomSeo\ModuleInterface;
+use OrchardGrove\HeirloomSeo\Modules\Authors\Authors;
 use OrchardGrove\HeirloomSeo\PageType;
 use OrchardGrove\HeirloomSeo\Settings\Options;
 
@@ -88,7 +89,7 @@ final class Robots implements ModuleInterface {
 				return true;
 			}
 			$user = $context->user();
-			if ( $user && get_user_meta( $user->ID, 'heirloom_seo_noindex', true ) ) {
+			if ( $user && Authors::isHidden( (int) $user->ID ) ) {
 				return true; // per-author "Hide from search engines" toggle (Edit User screen)
 			}
 		}
