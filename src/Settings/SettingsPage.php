@@ -21,20 +21,32 @@ final class SettingsPage implements ModuleInterface {
 	private const GROUP = 'heirloom_seo_group';
 	private const PAGE  = 'heirloom-seo';
 
-	/** @var array<string,string> */
-	private array $tabs;
+	/** @var array<string,string>|null */
+	private ?array $tabs = null;
 
-	public function __construct( private Options $options ) {
-		$this->tabs = [
-			'general'  => __( 'General', 'heirloom-seo' ),
-			'titles'   => __( 'Titles & Meta', 'heirloom-seo' ),
-			'social'   => __( 'Social', 'heirloom-seo' ),
-			'robots'   => __( 'Robots', 'heirloom-seo' ),
-			'sitemaps' => __( 'Sitemaps', 'heirloom-seo' ),
-			'ai'       => __( 'AI', 'heirloom-seo' ),
-			'advanced' => __( 'Advanced', 'heirloom-seo' ),
-			'tools'    => __( 'Tools', 'heirloom-seo' ),
-		];
+	public function __construct( private Options $options ) {}
+
+	/**
+	 * Built lazily, not in the constructor: the plugin boots at plugins_loaded,
+	 * and translation calls before init trigger WP 6.7's too-early
+	 * _load_textdomain_just_in_time notice. Callers all run at admin render time.
+	 *
+	 * @return array<string,string>
+	 */
+	private function tabs(): array {
+		if ( null === $this->tabs ) {
+			$this->tabs = [
+				'general'  => __( 'General', 'heirloom-seo' ),
+				'titles'   => __( 'Titles & Meta', 'heirloom-seo' ),
+				'social'   => __( 'Social', 'heirloom-seo' ),
+				'robots'   => __( 'Robots', 'heirloom-seo' ),
+				'sitemaps' => __( 'Sitemaps', 'heirloom-seo' ),
+				'ai'       => __( 'AI', 'heirloom-seo' ),
+				'advanced' => __( 'Advanced', 'heirloom-seo' ),
+				'tools'    => __( 'Tools', 'heirloom-seo' ),
+			];
+		}
+		return $this->tabs;
 	}
 
 	public function register(): void {
@@ -172,7 +184,7 @@ final class SettingsPage implements ModuleInterface {
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- tab/notice are display-only.
 		$current = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'general';
-		if ( ! isset( $this->tabs[ $current ] ) ) {
+		if ( ! isset( $this->tabs()[ $current ] ) ) {
 			$current = 'general';
 		}
 
@@ -203,7 +215,7 @@ final class SettingsPage implements ModuleInterface {
 			<?php $this->maybeNotice(); ?>
 
 			<nav class="hseo-tabs" aria-label="<?php esc_attr_e( 'Heirloom SEO settings', 'heirloom-seo' ); ?>">
-				<?php foreach ( $this->tabs as $slug => $label ) : ?>
+				<?php foreach ( $this->tabs() as $slug => $label ) : ?>
 					<a href="<?php echo esc_url( add_query_arg( [ 'page' => self::PAGE, 'tab' => $slug ], admin_url( 'admin.php' ) ) ); ?>"
 						class="hseo-tab <?php echo $slug === $current ? 'is-active' : ''; ?>"<?php echo $slug === $current ? ' aria-current="page"' : ''; ?>>
 						<span class="dashicons dashicons-<?php echo esc_attr( $icons[ $slug ] ?? 'admin-generic' ); ?>" aria-hidden="true"></span>

@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.14
+Stable tag: 0.7.15
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -72,6 +72,9 @@ Bing, Yandex, Seznam, and Naver. Google does not use IndexNow; it discovers
 changes via the sitemap and Search Console.
 
 == Changelog ==
+
+= 0.7.15 =
+* Fixed a WordPress 6.7+ "translation loading triggered too early" notice (_load_textdomain_just_in_time, flagged by Query Monitor): the settings-page tab labels are now translated lazily at render time instead of when the plugin boots.
 
 = 0.7.14 =
 * "Hide this author from search engines" now hides the author more completely: hidden authors are removed from the article schema (the post is attributed to the site/organization instead), their byline and author-archive link are replaced with the site name across the front end and feeds, and they are dropped from the public REST API users endpoint (the classic author-enumeration vector) for anonymous requests. Editors still see real authors in the dashboard. Note: a hardcoded theme byline that doesn't use WordPress's standard author functions may need a small theme tweak.
