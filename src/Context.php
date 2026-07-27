@@ -43,22 +43,22 @@ final class Context {
 			$this->type = PageType::Search;
 		} elseif ( is_front_page() ) {
 			$this->type   = PageType::Front;
-			$this->object = get_queried_object();
+			$this->object = self::queriedObject();
 		} elseif ( is_home() ) {
 			$this->type   = PageType::Home;
-			$this->object = get_queried_object();
+			$this->object = self::queriedObject();
 		} elseif ( is_singular() ) {
 			$this->type   = PageType::Singular;
-			$this->object = get_queried_object();
+			$this->object = self::queriedObject();
 		} elseif ( is_author() ) {
 			$this->type   = PageType::Author;
-			$this->object = get_queried_object();
+			$this->object = self::queriedObject();
 		} elseif ( is_post_type_archive() ) {
 			$this->type   = PageType::PostTypeArchive;
-			$this->object = get_queried_object();
+			$this->object = self::queriedObject();
 		} elseif ( is_category() || is_tag() || is_tax() ) {
 			$this->type   = PageType::Term;
-			$this->object = get_queried_object();
+			$this->object = self::queriedObject();
 		} elseif ( is_date() ) {
 			$this->type = PageType::Date;
 		} elseif ( is_feed() ) {
@@ -66,6 +66,21 @@ final class Context {
 		} else {
 			$this->type = PageType::Other;
 		}
+	}
+
+	/**
+	 * get_queried_object() is documented as object|null but can really return
+	 * false (author queries resolve via get_userdata()/get_user_by(), which
+	 * return false for a deleted/nonexistent user — feeds skip the 404 handling
+	 * that would normally catch this) or a WP_Error (bad term). Normalize
+	 * anything unexpected to null so the typed $object property never fatals.
+	 */
+	private static function queriedObject(): WP_Post|WP_Term|WP_User|WP_Post_Type|null {
+		$object = get_queried_object();
+		if ( $object instanceof WP_Post || $object instanceof WP_Term || $object instanceof WP_User || $object instanceof WP_Post_Type ) {
+			return $object;
+		}
+		return null;
 	}
 
 	public function type(): PageType {

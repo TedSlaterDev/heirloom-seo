@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.15
+Stable tag: 0.7.16
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -72,6 +72,9 @@ Bing, Yandex, Seznam, and Naver. Google does not use IndexNow; it discovers
 changes via the sitemap and Search Console.
 
 == Changelog ==
+
+= 0.7.16 =
+* Fixed a fatal TypeError on feed requests for a deleted or nonexistent author (e.g. /author/old-user/feed/): WordPress can hand back false instead of a user object there, which crashed the page context and returned a 500. Unexpected queried objects are now normalized to null, so those requests render an empty feed instead.
 
 = 0.7.15 =
 * Fixed a WordPress 6.7+ "translation loading triggered too early" notice (_load_textdomain_just_in_time, flagged by Query Monitor): the settings-page tab labels are now translated lazily at render time instead of when the plugin boots.
