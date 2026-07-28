@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.16
+Stable tag: 0.7.17
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -72,6 +72,9 @@ Bing, Yandex, Seznam, and Naver. Google does not use IndexNow; it discovers
 changes via the sitemap and Search Console.
 
 == Changelog ==
+
+= 0.7.17 =
+* IndexNow: the {key}.txt verification file is now written as a real file at the site root, not just served through a rewrite rule. Many servers (notably nginx) serve *.txt as static files and return 404 before WordPress ever runs, so on those hosts search engines could never verify the key and silently rejected every submission — with nothing in the logs to say why. The file is written on activation, on settings save, and on upgrade; rotating the key removes the old file; disabling IndexNow or deactivating the plugin cleans it up. A pre-existing file is never overwritten unless its contents already match the key (so a copy you created by hand is adopted rather than flagged), and an unwritable root now raises an admin notice instead of failing quietly. This mirrors how /llms.txt is already handled.
 
 = 0.7.16 =
 * Fixed a fatal TypeError on feed requests for a deleted or nonexistent author (e.g. /author/old-user/feed/): WordPress can hand back false instead of a user object there, which crashed the page context and returned a 500. Unexpected queried objects are now normalized to null, so those requests render an empty feed instead.

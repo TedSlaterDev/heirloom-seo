@@ -22,6 +22,15 @@ delete_option( 'heirloom_seo_llms_static_path' );
 delete_option( 'heirloom_seo_llms_static_failed' );
 delete_option( 'heirloom_seo_llms_dirty' );
 
+// Same for the IndexNow {key}.txt verification file — a serving artifact, not user data.
+$heirloom_seo_indexnow = get_option( 'heirloom_seo_indexnow_static_path' );
+if ( is_string( $heirloom_seo_indexnow ) && '' !== $heirloom_seo_indexnow && is_file( $heirloom_seo_indexnow ) ) {
+	@unlink( $heirloom_seo_indexnow ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
+}
+delete_option( 'heirloom_seo_indexnow_static' );
+delete_option( 'heirloom_seo_indexnow_static_path' );
+delete_option( 'heirloom_seo_indexnow_static_failed' );
+
 if ( ! is_array( $heirloom_seo_option ) || empty( $heirloom_seo_option['advanced']['delete_data_on_uninstall'] ) ) {
 	return;
 }

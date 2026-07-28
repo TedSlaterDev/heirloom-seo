@@ -99,6 +99,16 @@ final class Plugin {
 			$module->register();
 		}
 
+		// IndexNow key-file lifecycle — wired unconditionally (unlike the module
+		// itself) so turning IndexNow off, or rotating the key, still reconciles
+		// the physical {key}.txt. These hooks only fire when the settings option
+		// is actually written, so the front end pays nothing.
+		add_action( 'add_option_' . Options::OPTION, [ $this, 'syncIndexNowKeyFile' ] );
+		add_action( 'update_option_' . Options::OPTION, [ $this, 'syncIndexNowKeyFile' ] );
+		if ( is_admin() ) {
+			add_action( 'admin_notices', [ IndexNow::class, 'maybeAdminNotice' ] );
+		}
+
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			Commands::register();
 		}
@@ -112,7 +122,9 @@ final class Plugin {
 			update_option( 'heirloom_seo_needs_flush', '1' );
 			FileCache::purge();
 			$this->migrate();
-			LlmsTxt::markDirty(); // refresh the physical /llms.txt after an update
+			LlmsTxt::markDirty();                    // refresh the physical /llms.txt after an update
+			IndexNow::sync( new Options() );         // (re)write the key file — installs upgrading from
+													 // a rewrite-only build have never had one on disk
 		}
 
 		add_action( 'init', [ $this, 'maybeFlushRewrites' ], 99 );
@@ -165,16 +177,23 @@ final class Plugin {
 		}
 	}
 
+	/** Reconcile the physical IndexNow key file after the settings option is written. */
+	public function syncIndexNowKeyFile(): void {
+		IndexNow::sync( new Options() );
+	}
+
 	public static function activate(): void {
 		( new Options() )->seedDefaults();
 		FileCache::ensureDir();
 		update_option( 'heirloom_seo_needs_flush', '1' );
 		LlmsTxt::markDirty();
+		IndexNow::sync( new Options() );
 	}
 
 	public static function deactivate(): void {
 		flush_rewrite_rules( false );
 		delete_option( 'heirloom_seo_needs_flush' );
 		LlmsTxt::onDeactivate();
+		IndexNow::onDeactivate();
 	}
 }
