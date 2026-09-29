@@ -1,9 +1,9 @@
 name: Build & attach plugin ZIP
 
 # Builds a clean, WordPress-installable heirloom-seo.zip and attaches it to the
-# GitHub Release whenever you push a version tag (e.g. v0.7.9). The homepage's
-# Download button points at the always-current asset:
-#   https://github.com/TedSlaterDev/heirloom-seo/releases/latest/download/heirloom-seo.zip
+# GitHub Release whenever you push a version tag (e.g. v0.7.9), for people who
+# get the plugin from GitHub. The heirloomseo.com Download button self-hosts its
+# own copy, built by heirloomseo-site/build.php from the same file set.
 #
 # To cut a release after bumping the version:  git tag v0.7.9 && git push origin v0.7.9
 # (or create the tag/release from GitHub Desktop or the GitHub web UI).

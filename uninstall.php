@@ -31,6 +31,12 @@ delete_option( 'heirloom_seo_indexnow_static' );
 delete_option( 'heirloom_seo_indexnow_static_path' );
 delete_option( 'heirloom_seo_indexnow_static_failed' );
 
+// Remembered share-image URL lookups (Images::CACHE_PREFIX, "hseo_u2i_") are a
+// cache, not user data — clear them regardless of the opt-in. With a persistent
+// object cache they live there instead and simply expire.
+global $wpdb;
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like( '_transient_hseo_u2i_' ) . '%', $wpdb->esc_like( '_transient_timeout_hseo_u2i_' ) . '%' ) ); // phpcs:ignore WordPress.DB
+
 if ( ! is_array( $heirloom_seo_option ) || empty( $heirloom_seo_option['advanced']['delete_data_on_uninstall'] ) ) {
 	return;
 }

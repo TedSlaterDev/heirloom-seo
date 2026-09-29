@@ -15,6 +15,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( ! defined( 'HEIRLOOM_SEO_VERSION' ) ) {
 	define( 'HEIRLOOM_SEO_VERSION', 'test' );
 }
+if ( ! defined( 'HEIRLOOM_SEO_BASENAME' ) ) {
+	define( 'HEIRLOOM_SEO_BASENAME', 'heirloom-seo/heirloom-seo.php' );
+}
+if ( ! defined( 'MINUTE_IN_SECONDS' ) ) {
+	define( 'MINUTE_IN_SECONDS', 60 );
+}
+if ( ! defined( 'DAY_IN_SECONDS' ) ) {
+	define( 'DAY_IN_SECONDS', 86400 );
+}
+if ( ! defined( 'ARRAY_A' ) ) {
+	define( 'ARRAY_A', 'ARRAY_A' );
+}
 
 require dirname( __DIR__ ) . '/vendor/autoload.php';
 

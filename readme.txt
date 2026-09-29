@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.17
+Stable tag: 0.7.20
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -71,7 +71,25 @@ At `/sitemap.xml`. It replaces the core WordPress sitemap.
 Bing, Yandex, Seznam, and Naver. Google does not use IndexNow; it discovers
 changes via the sitemap and Search Console.
 
+= I imported from Yoast before version 0.7.19. Are my noindex settings right? =
+
+Possibly not. Versions up to 0.7.18 read Yoast's per-post "show in search
+results" setting backwards. As long as Yoast's data is still in your database,
+`wp heirloom-seo repair yoast-noindex` lists every post whose noindex setting
+disagrees with what Yoast had, and changes nothing. Add `--fix` to correct
+them after a confirmation, and `--exclude=<ids>` to skip posts you've changed
+on purpose since the import.
+
 == Changelog ==
+
+= 0.7.20 =
+* New WP-CLI command, `wp heirloom-seo repair yoast-noindex`, for sites imported from Yoast with version 0.7.18 or earlier (see 0.7.19). It compares each post's Yoast "show in search results" setting with its Heirloom noindex flag and lists the posts that disagree, without changing anything. With `--fix` (after a confirmation, or `--yes`) it adds or removes the flags to match Yoast, then clears the sitemap cache. `--only=add|remove`, `--exclude=<ids>` and `--format=table|csv|json|ids|count` narrow or export the list. It needs Yoast's post data to still be in the database, and it can't tell a flag the importer wrote from one an editor set later, so review the list first.
+
+= 0.7.19 =
+* Fixed the Yoast SEO importer reading Yoast's per-post "Allow search engines to show this post in search results?" setting backwards. Yoast stores 1 for "No" (noindex) and 2 for an explicit "Yes", and the importer had them swapped: posts an editor had explicitly set to appear in search results were imported as noindex, and posts set to noindex were imported as indexable. Posts left on Yoast's default were not affected, and the nofollow import was already correct. If you have already imported from Yoast, check posts where that setting was changed: running the import again adds the missing noindex flags, but it does not remove the wrong ones.
+
+= 0.7.18 =
+* Share-image lookups are now resolved once per request and cached, removing up to ~1 s of database time from uncached pages without a featured image on large sites. When the default share image (or a post's override) is stored as a URL, finding its media-library entry means an unindexed scan of the post-meta table; that used to run up to three times per page (og:image, twitter:image, schema) and now runs once, with the answer remembered in a transient. The cache refreshes itself whenever an image is uploaded, edited or deleted, and the share tags for media-library images are unchanged.
 
 = 0.7.17 =
 * IndexNow: the {key}.txt verification file is now written as a real file at the site root, not just served through a rewrite rule. Many servers (notably nginx) serve *.txt as static files and return 404 before WordPress ever runs, so on those hosts search engines could never verify the key and silently rejected every submission — with nothing in the logs to say why. The file is written on activation, on settings save, and on upgrade; rotating the key removes the old file; disabling IndexNow or deactivating the plugin cleans it up. A pre-existing file is never overwritten unless its contents already match the key (so a copy you created by hand is adopted rather than flagged), and an unwritable root now raises an admin notice instead of failing quietly. This mirrors how /llms.txt is already handled.

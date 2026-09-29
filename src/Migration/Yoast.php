@@ -40,8 +40,8 @@ final class Yoast extends AbstractMetaSource {
 		if ( '' !== $canonical ) {
 			$out['_heirloom_seo_canonical'] = $canonical;
 		}
-		// Yoast: 0 = default, 1 = index, 2 = noindex.
-		if ( '2' === $this->meta( $post_id, '_yoast_wpseo_meta-robots-noindex' ) ) {
+		// Yoast: 0 = post-type default, 1 = noindex, 2 = index (class-wpseo-meta.php, get_robots_noindex()).
+		if ( '1' === $this->meta( $post_id, '_yoast_wpseo_meta-robots-noindex' ) ) {
 			$out['_heirloom_seo_noindex'] = true;
 		}
 		if ( '1' === $this->meta( $post_id, '_yoast_wpseo_meta-robots-nofollow' ) ) {

@@ -5,6 +5,8 @@ namespace OrchardGrove\HeirloomSeo\Cli;
 
 use OrchardGrove\HeirloomSeo\Audit\Audit;
 use OrchardGrove\HeirloomSeo\Migration\Importer;
+use OrchardGrove\HeirloomSeo\Migration\YoastRobotsRepair;
+use OrchardGrove\HeirloomSeo\Modules\Ai\LlmsTxt;
 use OrchardGrove\HeirloomSeo\Modules\IndexNow\IndexNow;
 use OrchardGrove\HeirloomSeo\Settings\Options;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
@@ -134,6 +136,91 @@ final class Commands {
 		$progress->finish();
 		$verb = $dry_run ? 'would import' : 'imported';
 		\WP_CLI::success( "Heirloom SEO {$verb} data for {$imported} posts from {$source->label()}." );
+	}
+
+	/**
+	 * Find, and optionally fix, noindex flags the Yoast importer got backwards.
+	 *
+	 * Heirloom SEO 0.7.18 and earlier read Yoast's per-post "Allow search engines
+	 * to show this post in search results?" setting backwards. This compares each
+	 * post's Yoast value with its Heirloom noindex flag and lists the ones that
+	 * disagree. Nothing changes unless you pass --fix.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <what>
+	 * : What to repair. Only `yoast-noindex` for now.
+	 *
+	 * [--fix]
+	 * : Apply the listed changes (asks first unless --yes).
+	 *
+	 * [--only=<which>]
+	 * : `add`: posts Yoast marked noindex that were imported as indexable. `remove`: posts Yoast marked "index" that were imported as noindex.
+	 *
+	 * [--exclude=<ids>]
+	 * : Comma-separated post IDs to leave alone, e.g. flags an editor has since set on purpose.
+	 *
+	 * [--format=<format>]
+	 * : table, csv, json, ids or count.
+	 * ---
+	 * default: table
+	 * ---
+	 *
+	 * [--yes]
+	 * : Skip the confirmation prompt.
+	 *
+	 * ## EXAMPLES
+	 *     wp heirloom-seo repair yoast-noindex
+	 *     wp heirloom-seo repair yoast-noindex --format=csv > yoast-noindex.csv
+	 *     wp heirloom-seo repair yoast-noindex --fix --exclude=123,456
+	 *
+	 * @param string[]             $args
+	 * @param array<string,string> $assoc
+	 */
+	public function repair( array $args, array $assoc ): void {
+		if ( 'yoast-noindex' !== ( $args[0] ?? '' ) ) {
+			\WP_CLI::error( 'Usage: wp heirloom-seo repair yoast-noindex [--fix] [--only=add|remove] [--exclude=<ids>] [--format=<format>] [--yes]' );
+		}
+		$only = (string) ( $assoc['only'] ?? '' );
+		if ( '' !== $only && ! in_array( $only, [ 'add', 'remove' ], true ) ) {
+			\WP_CLI::error( '--only must be "add" or "remove".' );
+		}
+
+		$repair = new YoastRobotsRepair();
+		if ( ! $repair->hasYoastData() ) {
+			\WP_CLI::error( "No Yoast robots settings found in post meta, so there's nothing to compare against." );
+		}
+
+		$exclude = array_values( array_filter( array_map( 'intval', explode( ',', (string) ( $assoc['exclude'] ?? '' ) ) ) ) );
+		$items   = YoastRobotsRepair::filter( $repair->findMismatches(), $only, $exclude );
+		$format  = (string) ( $assoc['format'] ?? 'table' );
+		$adds    = count( array_filter( $items, static fn( array $item ): bool => YoastRobotsRepair::ADD === $item['action'] ) );
+		$removes = count( $items ) - $adds;
+
+		if ( 'ids' === $format ) {
+			\WP_CLI::line( implode( ' ', array_column( $items, 'id' ) ) );
+		} elseif ( $items || 'table' !== $format ) {
+			\WP_CLI\Utils\format_items( $format, $items, [ 'id', 'title', 'type', 'status', 'yoast', 'heirloom', 'action' ] );
+		}
+
+		if ( ! $items ) {
+			if ( 'table' === $format ) {
+				\WP_CLI::success( 'Every post with an explicit Yoast setting already matches its Heirloom flag. Nothing to repair.' );
+			}
+			return;
+		}
+		if ( ! isset( $assoc['fix'] ) ) {
+			if ( 'table' === $format ) {
+				\WP_CLI::log( "{$adds} to add noindex, {$removes} to remove it. Nothing was changed; run again with --fix to apply." );
+			}
+			return;
+		}
+
+		\WP_CLI::confirm( "Add noindex to {$adds} posts and remove it from {$removes}?", $assoc );
+		$changed = $repair->apply( $items );
+		FileCache::purge();   // Sitemaps leave noindexed posts out.
+		LlmsTxt::markDirty(); // So does /llms.txt.
+		\WP_CLI::success( "Changed {$changed} posts: noindex added to {$adds}, removed from {$removes}. Sitemap cache cleared." );
 	}
 
 	/**

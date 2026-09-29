@@ -24,6 +24,7 @@ use OrchardGrove\HeirloomSeo\Modules\Sitemaps\Sitemaps;
 use OrchardGrove\HeirloomSeo\Settings\Options;
 use OrchardGrove\HeirloomSeo\Settings\SettingsPage;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
+use OrchardGrove\HeirloomSeo\Support\Images;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -98,6 +99,11 @@ final class Plugin {
 		foreach ( $modules as $module ) {
 			$module->register();
 		}
+
+		// Share-image URL lookups are remembered across requests; forget an entry
+		// when the attachment behind its URL is uploaded, re-filed or deleted.
+		// Wired everywhere — uploads also arrive over REST, WP-CLI and cron.
+		Images::registerCacheInvalidation();
 
 		// IndexNow key-file lifecycle — wired unconditionally (unlike the module
 		// itself) so turning IndexNow off, or rotating the key, still reconciles
