@@ -30,11 +30,39 @@ final class LlmsTxt implements ModuleInterface {
 	public function register(): void {
 		add_action( 'init', [ $this, 'addRewrite' ] );
 		add_filter( 'query_vars', [ $this, 'queryVars' ] );
+		add_filter( 'posts_pre_query', [ self::class, 'skipMainQuery' ], 10, 2 );
 		add_action( 'template_redirect', [ $this, 'maybeServe' ], 0 ); // Before redirect_canonical's trailing-slash redirect.
 		foreach ( self::PURGE_HOOKS as $hook ) {
-			add_action( $hook, [ FileCache::class, 'purge' ] );
+			add_action( $hook, [ self::class, 'forgetCachedBody' ] );
 			add_action( $hook, [ self::class, 'markDirty' ] );
 		}
+	}
+
+	/**
+	 * Drop only the cached llms.txt body. (This used to call FileCache::purge(),
+	 * which deleted every cached sitemap on every save_post too.)
+	 */
+	public static function forgetCachedBody(): void {
+		FileCache::forget( 'llms' );
+	}
+
+	/**
+	 * /llms.txt is served at template_redirect, after WordPress has run the main
+	 * query (the blog home query, SQL_CALC_FOUND_ROWS over every post). Hooked
+	 * to posts_pre_query: answer it with nothing.
+	 *
+	 * @param mixed $posts
+	 * @param mixed $query
+	 * @return mixed
+	 */
+	public static function skipMainQuery( $posts, $query ) {
+		if ( null === $posts && $query instanceof \WP_Query && $query->is_main_query() && 'index' === (string) $query->get( self::QV ) ) {
+			$query->set( 'ignore_sticky_posts', true ); // The sticky-post fetch runs even without the main SQL.
+			$query->found_posts   = 0;
+			$query->max_num_pages = 0;
+			return [];
+		}
+		return $posts;
 	}
 
 	public function addRewrite(): void {

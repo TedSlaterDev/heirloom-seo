@@ -8,6 +8,7 @@ use OrchardGrove\HeirloomSeo\Migration\Importer;
 use OrchardGrove\HeirloomSeo\Migration\YoastRobotsRepair;
 use OrchardGrove\HeirloomSeo\Modules\Ai\LlmsTxt;
 use OrchardGrove\HeirloomSeo\Modules\IndexNow\IndexNow;
+use OrchardGrove\HeirloomSeo\Modules\Sitemaps\Sitemaps;
 use OrchardGrove\HeirloomSeo\Settings\Options;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
 
@@ -35,11 +36,14 @@ final class Commands {
 			\WP_CLI::error( 'Usage: wp heirloom-seo cache purge' );
 		}
 		FileCache::purge();
-		\WP_CLI::success( 'Sitemap / AI cache purged.' );
+		\WP_CLI::success( 'Sitemap / AI cache purged. To rebuild the sitemaps now: wp heirloom-seo sitemap regenerate' );
 	}
 
 	/**
-	 * Regenerate the sitemap (clears the cache; it rebuilds on next request).
+	 * Rebuild every sitemap now, one at a time, the index last. Run it after an
+	 * update (which marks every sitemap for rebuilding) so crawlers find the
+	 * pages already built. Crawlers keep getting the previous copies meanwhile,
+	 * and the rebuild takes turns with live requests for the build slots.
 	 *
 	 * ## EXAMPLES
 	 *     wp heirloom-seo sitemap regenerate
@@ -50,8 +54,68 @@ final class Commands {
 		if ( ( $args[0] ?? '' ) !== 'regenerate' ) {
 			\WP_CLI::error( 'Usage: wp heirloom-seo sitemap regenerate' );
 		}
-		FileCache::purge();
-		\WP_CLI::success( 'Sitemap cache cleared — it will rebuild on the next request.' );
+		$options = new Options();
+		if ( ! $options->bool( 'sitemaps.enabled' ) ) {
+			\WP_CLI::error( 'Sitemaps are turned off (Heirloom SEO → Sitemaps).' );
+		}
+		FileCache::ensureDir();
+		if ( ! wp_is_writable( FileCache::dir() ) ) {
+			\WP_CLI::error( 'Can\'t write the sitemap cache (' . FileCache::dir() . '). Run this as the web server\'s user.' );
+		}
+
+		$sitemaps = new Sitemaps( $options );
+		$all      = $sitemaps->all();
+		for ( $try = 1; null === $all && $try < 5; $try++ ) {
+			sleep( 2 );
+			self::flushRuntimeCache();
+			$all = $sitemaps->all();
+		}
+		if ( null === $all ) {
+			\WP_CLI::error( 'A sitemap count query kept failing, so nothing was changed. Try again shortly.' );
+		}
+
+		// Drop copies of pages that no longer exist; mark the rest stale so each is rebuilt.
+		FileCache::forget( ...array_diff( FileCache::keys( 'sub_' ), array_keys( $all ) ) );
+		FileCache::markStale( ...array_keys( $all ) );
+
+		$progress = \WP_CLI\Utils\make_progress_bar( 'Building sitemaps', count( $all ) );
+		$built    = 0;
+		$missed   = [];
+		foreach ( $all as $key => [ $which, $type, $page ] ) {
+			// A live request may have rebuilt it since it was marked stale. (The
+			// index, last, is stale again whenever a page build raised a lastmod.)
+			$result = self::rebuiltSince( $key ) ? [ 'status' => 200, 'cached' => true ] : $sitemaps->build( $which, $type, $page );
+			for ( $try = 1; null === $result && $try < 15; $try++ ) {
+				sleep( 2 ); // Every build slot is busy with live requests, or a read failed.
+				self::flushRuntimeCache(); // A failed read can leave its empty answer cached.
+				$result = self::rebuiltSince( $key ) ? [ 'status' => 200, 'cached' => true ] : $sitemaps->build( $which, $type, $page );
+			}
+			if ( null === $result || ( 200 === $result['status'] && empty( $result['cached'] ) ) ) {
+				$missed[] = $key; // Not built, or built but the file couldn't be written.
+			} elseif ( 200 === $result['status'] ) {
+				++$built;
+			}
+			self::flushRuntimeCache(); // Each page loads ~1,000 posts into memory.
+			$progress->tick();
+		}
+		$progress->finish();
+
+		if ( $missed ) {
+			\WP_CLI::warning( sprintf( 'Not built (they rebuild on their next request): %s', implode( ', ', $missed ) ) );
+		}
+		\WP_CLI::success( "Built {$built} sitemaps." );
+	}
+
+	/** Fresh and written by this version: rebuilt since it was marked stale. */
+	private static function rebuiltSince( string $key ): bool {
+		[ $copy, $fresh ] = FileCache::lookup( $key, 0 );
+		return $fresh && Sitemaps::isCurrent( $copy );
+	}
+
+	private static function flushRuntimeCache(): void {
+		if ( function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_runtime' ) ) {
+			wp_cache_flush_runtime();
+		}
 	}
 
 	/**
@@ -218,9 +282,11 @@ final class Commands {
 
 		\WP_CLI::confirm( "Add noindex to {$adds} posts and remove it from {$removes}?", $assoc );
 		$changed = $repair->apply( $items );
-		FileCache::purge();   // Sitemaps leave noindexed posts out.
-		LlmsTxt::markDirty(); // So does /llms.txt.
-		\WP_CLI::success( "Changed {$changed} posts: noindex added to {$adds}, removed from {$removes}. Sitemap cache cleared." );
+		// Sitemaps leave noindexed posts out: the flag's meta hooks mark the pages
+		// holding these posts stale (at the end of this command). /llms.txt too:
+		LlmsTxt::forgetCachedBody();
+		LlmsTxt::markDirty();
+		\WP_CLI::success( "Changed {$changed} posts: noindex added to {$adds}, removed from {$removes}. Their sitemap pages will rebuild." );
 	}
 
 	/**

@@ -111,6 +111,10 @@ final class Plugin {
 		// is actually written, so the front end pays nothing.
 		add_action( 'add_option_' . Options::OPTION, [ $this, 'syncIndexNowKeyFile' ] );
 		add_action( 'update_option_' . Options::OPTION, [ $this, 'syncIndexNowKeyFile' ] );
+		// Settings that change sitemap or llms.txt output refresh their caches
+		// however they're written (settings page, WP-CLI, code).
+		add_action( 'add_option_' . Options::OPTION, static fn( $name, $value ) => SettingsPage::onSettingsWritten( [], $value ), 10, 2 );
+		add_action( 'update_option_' . Options::OPTION, [ SettingsPage::class, 'onSettingsWritten' ], 10, 2 );
 		if ( is_admin() ) {
 			add_action( 'admin_notices', [ IndexNow::class, 'maybeAdminNotice' ] );
 		}

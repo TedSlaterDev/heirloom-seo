@@ -83,6 +83,8 @@ final class AuthorFields implements ModuleInterface {
 			delete_user_meta( $user_id, self::META );
 		}
 
-		FileCache::purge(); // the author sitemap is cached — drop it so the change takes effect immediately
+		// The author sitemap (and the index's page count for it) must be rebuilt;
+		// stale copies stay servable meanwhile, and the other sitemaps are untouched.
+		FileCache::markStale( 'index', ...FileCache::keys( 'sub_author_' ) );
 	}
 }

@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.20
+Stable tag: 0.7.23
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -81,6 +81,33 @@ them after a confirmation, and `--exclude=<ids>` to skip posts you've changed
 on purpose since the import.
 
 == Changelog ==
+
+= 0.7.23 =
+* Fixed: the Google News sitemap's 48-hour window was off by the site's time zone. WordPress read "48 hours ago" in the site's time zone but compared it with each post's UTC publish time, so a site on US Eastern time listed posts for about 52 hours, and a site east of UTC for less than 48 (about 39 hours in Japan). The window is now exactly 48 hours on every site. The sitemap index uses the same window when deciding whether to list the News sitemap.
+
+= 0.7.22 =
+* Improved: sitemap and llms.txt requests no longer run WordPress's main blog query first. That query counted every published post on every sitemap request, including requests answered from the cache.
+* Improved: the Google News sitemap, and the index's check for recent news, now read only recent posts through an indexed date instead of every post in the News category.
+* Improved: the sitemap index and the News sitemap get build slots of their own, so a burst of page builds never holds them up. A cached copy's one-day lifetime now varies by up to 10% per page, so pages built together don't all expire together.
+* Changed: `wp heirloom-seo sitemap regenerate` now rebuilds every sitemap straight away, one at a time and the index last, instead of only clearing the cache. Crawlers keep getting the previous copies while it runs. It skips pages a visitor's request rebuilt meanwhile, changes nothing if a count query keeps failing, and lists any page it couldn't build or write. Run it after updating the plugin.
+* Changed: clearing the sitemap cache (Tools → Flush, `wp heirloom-seo cache purge`, an update, or a change to a sitemap setting) now keeps each sitemap's previous copy for crawlers until the page is rebuilt, instead of answering them with 503s. A rebuilt page gets a new last-modified date only if its contents changed. Sitemaps written by an earlier version are always rebuilt rather than served as current.
+* Fixed: a database error while a sitemap was being built could be cached as an empty or incomplete sitemap for up to a day. Now the previous copy (or a 503) is served and nothing is cached, and a retry doesn't reuse the empty answer WordPress kept from the failed query. Errors from another plugin's own queries (for example in a pre_get_posts hook) don't stop sitemaps being cached.
+* Fixed: a page's last-modified date in the sitemap index now moves whenever the page's contents change, even when no post's modified date did (for example, a rebuild that picks up a change it missed), and the index is rebuilt to show it. Changes that rewrite every page (a new page size, the image or post-type settings, the permalink structure) mark every page changed. A database error can no longer wipe the stored dates.
+* Fixed: changes made without saving a post now reach the sitemaps right away instead of after the one-day cache lifetime: the noindex flag or featured image set by a bulk tool, an importer or WP-CLI; deleting an image used as a featured image (only the pages of the posts that used it); permalink setting changes; renaming or deleting a category that appears in the permalink structure; changing a parent page's slug or parent, trashing or restoring it, or emptying it from the trash; deleting a user whose posts are reassigned; and, on multisite, changes made from another site of the network. `wp heirloom-seo repair yoast-noindex --fix` therefore no longer clears the whole sitemap cache.
+* Changed: settings changes clear the sitemap cache only when a sitemap setting really changed, whether saved on the settings page or written by WP-CLI or code; saving the Sitemaps tab without changing anything no longer clears it. Hiding an author refreshes only the author sitemap.
+* Fixed: Tools → "Regenerate IndexNow key" kept the old key.
+* Fixed: a sitemap URL with an absurdly large page number could serve, and cache, a real page's contents. It now returns 404.
+* Improved: bulk-editing many posts works out their sitemap pages in one pass over the index instead of one per post; terms are loaded only when the permalink structure or an include filter uses them; and building a post page no longer counts every post.
+* Note: post sitemaps are paged straight from the database, so filters on WordPress's post queries (such as pre_get_posts) don't apply to them. To leave posts out, use the new `heirloom_seo_sitemap_include_post` filter; a post left out keeps its place, so the pages after it don't change. Removing or backdating an old post still moves every later post by one place, so the pages after it are rebuilt and re-advertised.
+
+= 0.7.21 =
+* Fixed sitemaps taking large sites down under crawler load. Every post save used to delete every cached sitemap file, so on a busy site the cache was almost always empty, and a crawler requesting hundreds of sitemap pages at once started hundreds of expensive builds in parallel until the server ran out of PHP workers. On a site with about 340,000 posts this produced repeated site-wide 504 errors, including in wp-admin.
+* Changed: post sitemap pages now list posts oldest first, so a page keeps the same posts as the site grows. Publishing a post changes only the last page, and editing a post changes only the page it is on.
+* Changed: saving, publishing, unpublishing or deleting a post now marks only the affected sitemap pages as out of date, instead of clearing the whole sitemap cache. llms.txt no longer clears the sitemap cache either.
+* Changed: at most two sitemap pages are generated at the same time (filter `heirloom_seo_sitemap_build_slots`). Beyond that, a crawler gets the previous copy of the page, or a 503 with Retry-After when there is no previous copy, instead of an extra build.
+* Improved: each sitemap page is now built from one indexed database query plus batched loading of its posts and featured images, instead of a sort over every post and a few queries per post.
+* Improved: the sitemap index now shows a last-modified date for each page, so crawlers only need to fetch the pages that changed.
+* Improved: sitemap responses now send a `Cache-Control` header (5 minutes for News, 15 for the index, 1 hour for other pages; filter `heirloom_seo_sitemap_max_age`) so a CDN can cache them. A cached copy is also rebuilt after a day even if no change was recorded (filter `heirloom_seo_sitemap_cache_ttl`), which catches changes made directly in the database.
 
 = 0.7.20 =
 * New WP-CLI command, `wp heirloom-seo repair yoast-noindex`, for sites imported from Yoast with version 0.7.18 or earlier (see 0.7.19). It compares each post's Yoast "show in search results" setting with its Heirloom noindex flag and lists the posts that disagree, without changing anything. With `--fix` (after a confirmation, or `--yes`) it adds or removes the flags to match Yoast, then clears the sitemap cache. `--only=add|remove`, `--exclude=<ids>` and `--format=table|csv|json|ids|count` narrow or export the list. It needs Yoast's post data to still be in the database, and it can't tell a flag the importer wrote from one an editor set later, so review the list first.

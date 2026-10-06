@@ -30,6 +30,7 @@ if ( is_string( $heirloom_seo_indexnow ) && '' !== $heirloom_seo_indexnow && is_
 delete_option( 'heirloom_seo_indexnow_static' );
 delete_option( 'heirloom_seo_indexnow_static_path' );
 delete_option( 'heirloom_seo_indexnow_static_failed' );
+delete_option( 'heirloom_seo_sitemap_lastmod' );
 
 // Remembered share-image URL lookups (Images::CACHE_PREFIX, "hseo_u2i_") are a
 // cache, not user data — clear them regardless of the opt-in. With a persistent

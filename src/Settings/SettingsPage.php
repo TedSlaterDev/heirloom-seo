@@ -6,7 +6,9 @@ namespace OrchardGrove\HeirloomSeo\Settings;
 use OrchardGrove\HeirloomSeo\ModuleInterface;
 use OrchardGrove\HeirloomSeo\Migration\Ajax;
 use OrchardGrove\HeirloomSeo\Modules\Ai\Crawlers;
+use OrchardGrove\HeirloomSeo\Modules\Ai\LlmsTxt;
 use OrchardGrove\HeirloomSeo\Modules\IndexNow\IndexNow;
+use OrchardGrove\HeirloomSeo\Modules\Sitemaps\Sitemaps;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
 
 defined( 'ABSPATH' ) || exit;
@@ -553,8 +555,49 @@ final class SettingsPage implements ModuleInterface {
 		}
 
 		update_option( 'heirloom_seo_needs_flush', '1' );
-		FileCache::purge(); // Settings can change sitemap/llms output — drop stale caches.
 		return $merged;
+	}
+
+	/**
+	 * Hooked (by Plugin::boot, everywhere) to add_option_ / update_option_ for
+	 * the settings option, so a write from WP-CLI or code counts the same as a
+	 * settings-page save. Drops cached output only when a setting behind it
+	 * changed: a purge means every sitemap is rebuilt (served stale meanwhile).
+	 * Values are compared with defaults filled in, so first storing a default
+	 * isn't a change.
+	 *
+	 * @param mixed $before
+	 * @param mixed $after
+	 */
+	public static function onSettingsWritten( $before, $after ): void {
+		$defaults = ( new Options() )->defaults();
+		$before   = self::mergeDeep( $defaults, is_array( $before ) ? $before : [] );
+		$after    = self::mergeDeep( $defaults, is_array( $after ) ? $after : [] );
+
+		if ( self::changed( $before, $after, [ 'sitemaps.per_page', 'sitemaps.images', 'sitemaps.post_types' ] ) ) {
+			Sitemaps::markAllPagesChanged(); // Every post page's contents changed.
+		}
+		if ( self::changed( $before, $after, [ 'sitemaps', 'schema.news_category', 'schema.news_tag', 'schema.news_term' ] ) ) {
+			FileCache::purge();
+		} elseif ( self::changed( $before, $after, [ 'ai' ] ) ) {
+			LlmsTxt::forgetCachedBody();
+		}
+	}
+
+	/**
+	 * @param array<string,mixed> $before
+	 * @param array<string,mixed> $after
+	 * @param string[]            $paths dotted paths
+	 */
+	private static function changed( array $before, array $after, array $paths ): bool {
+		foreach ( $paths as $path ) {
+			$old = self::hasNested( $before, $path ) ? self::getNested( $before, $path ) : null;
+			$new = self::hasNested( $after, $path ) ? self::getNested( $after, $path ) : null;
+			if ( $old !== $new ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** @return array<string,string> dotted path => type spec. */
@@ -682,7 +725,14 @@ final class SettingsPage implements ModuleInterface {
 		$option = get_option( Options::OPTION, [] );
 		$option = is_array( $option ) ? $option : [];
 		$option['indexnow']['key'] = IndexNow::generateKey();
+		// admin-post.php fires admin_init, so the settings sanitizer is attached;
+		// it rebuilds the option from form fields only and would keep the old key.
+		$filter = 'sanitize_option_' . Options::OPTION;
+		$had    = remove_filter( $filter, [ $this, 'sanitize' ] );
 		update_option( Options::OPTION, $option, true );
+		if ( $had ) {
+			add_filter( $filter, [ $this, 'sanitize' ] );
+		}
 		update_option( 'heirloom_seo_needs_flush', '1' );
 
 		$this->redirectTools( 'key' );
@@ -981,7 +1031,7 @@ final class SettingsPage implements ModuleInterface {
 	}
 
 	/** @param array<string,mixed> $array */
-	private function hasNested( array $array, string $path ): bool {
+	private static function hasNested( array $array, string $path ): bool {
 		foreach ( explode( '.', $path ) as $segment ) {
 			if ( ! is_array( $array ) || ! array_key_exists( $segment, $array ) ) {
 				return false;
@@ -995,7 +1045,7 @@ final class SettingsPage implements ModuleInterface {
 	 * @param array<string,mixed> $array
 	 * @return mixed
 	 */
-	private function getNested( array $array, string $path ): mixed {
+	private static function getNested( array $array, string $path ): mixed {
 		foreach ( explode( '.', $path ) as $segment ) {
 			$array = $array[ $segment ];
 		}
@@ -1026,10 +1076,10 @@ final class SettingsPage implements ModuleInterface {
 	 * @param array<string,mixed> $over
 	 * @return array<string,mixed>
 	 */
-	private function mergeDeep( array $base, array $over ): array {
+	private static function mergeDeep( array $base, array $over ): array {
 		foreach ( $over as $key => $value ) {
 			if ( is_array( $value ) && ! array_is_list( $value ) && isset( $base[ $key ] ) && is_array( $base[ $key ] ) ) {
-				$base[ $key ] = $this->mergeDeep( $base[ $key ], $value );
+				$base[ $key ] = self::mergeDeep( $base[ $key ], $value );
 			} else {
 				$base[ $key ] = $value;
 			}
