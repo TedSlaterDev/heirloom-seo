@@ -370,18 +370,47 @@ final class Sitemaps implements ModuleInterface {
 	private function emit( array $response ): void {
 		if ( ! headers_sent() ) {
 			status_header( $response['status'] );
-			if ( 200 === $response['status'] ) {
-				header( 'Content-Type: application/xml; charset=UTF-8' );
-				header( 'X-Robots-Tag: noindex, follow', true );
-				header( 'Cache-Control: public, max-age=' . $response['max_age'] );
-			} elseif ( 503 === $response['status'] ) {
-				header( 'Content-Type: text/plain; charset=UTF-8' );
-				header( 'Retry-After: 120' );
-				header( 'Cache-Control: no-store' );
+			foreach ( self::responseHeaders( $response ) as $header ) {
+				header( $header );
 			}
 		}
 		echo $response['body']; // phpcs:ignore WordPress.Security.EscapeOutput -- XML assembled with esc_url/esc_xml; fixed plain-text otherwise.
 		exit;
+	}
+
+	/**
+	 * Headers for a sitemap response. X-Accel-Expires tells an nginx page cache
+	 * how long to keep it — the same as the Cache-Control we declare. Some
+	 * managed hosts set their own value earlier in the request (3 hours for a
+	 * URL like a sitemap) and nginx obeys it over Cache-Control; header()
+	 * replaces it. A 404 is kept a minute: the page may exist soon (the next
+	 * page of posts).
+	 *
+	 * @internal Public for tests.
+	 * @param array{status:int,body:string,max_age:int} $response
+	 * @return string[]
+	 */
+	public static function responseHeaders( array $response ): array {
+		if ( 200 === $response['status'] ) {
+			return [
+				'Content-Type: application/xml; charset=UTF-8',
+				'X-Robots-Tag: noindex, follow',
+				'Cache-Control: public, max-age=' . $response['max_age'],
+				'X-Accel-Expires: ' . $response['max_age'],
+			];
+		}
+		if ( 503 === $response['status'] ) {
+			return [
+				'Content-Type: text/plain; charset=UTF-8',
+				'Retry-After: 120',
+				'Cache-Control: no-store',
+				'X-Accel-Expires: 0',
+			];
+		}
+		return [
+			'Cache-Control: public, max-age=60',
+			'X-Accel-Expires: 60',
+		];
 	}
 
 	/**
@@ -836,8 +865,8 @@ final class Sitemaps implements ModuleInterface {
 	// --- Google News ------------------------------------------------------
 
 	private function buildNews(): string {
-		$tax_query = $this->newsTaxQuery();
-		if ( ! $tax_query ) {
+		$news = $this->newsQueryArgs();
+		if ( ! $news ) {
 			return $this->renderNews( [] );
 		}
 
@@ -853,9 +882,7 @@ final class Sitemaps implements ModuleInterface {
 					'ignore_sticky_posts'    => true,
 					'update_post_term_cache' => false,
 					'update_post_meta_cache' => true,
-					'tax_query'              => $tax_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
-					'date_query'             => self::newsDateQuery(),
-				]
+				] + $news
 			),
 			static fn( $query ) => self::forgetPostQuery( $query )
 		);
@@ -880,8 +907,8 @@ final class Sitemaps implements ModuleInterface {
 	}
 
 	private function hasRecentNews(): bool {
-		$tax_query = $this->newsTaxQuery();
-		if ( ! $tax_query ) {
+		$news = $this->newsQueryArgs();
+		if ( ! $news ) {
 			return false;
 		}
 		$query = $this->checked(
@@ -892,9 +919,7 @@ final class Sitemaps implements ModuleInterface {
 					'posts_per_page' => 1,
 					'fields'         => 'ids',
 					'no_found_rows'  => true,
-					'tax_query'      => $tax_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
-					'date_query'     => self::newsDateQuery(),
-				]
+				] + $news
 			),
 			static fn( $query ) => self::forgetPostQuery( $query )
 		);
@@ -928,6 +953,48 @@ final class Sitemaps implements ModuleInterface {
 			[ 'after' => $utc( 62 ), 'column' => 'post_date' ],
 			[ 'after' => $utc( 48 ), 'column' => 'post_date_gmt', 'inclusive' => true ],
 		];
+	}
+
+	/**
+	 * What the News sitemap (and the index's "is there recent news" check)
+	 * selects: posts from the last 48 hours — every post, or those in the News
+	 * category or tag — minus the excluded categories (with their
+	 * subcategories), tags and authors. Empty when the News rule names a term
+	 * that doesn't exist.
+	 *
+	 * @return array<string,mixed> WP_Query args: date_query, maybe tax_query and author__not_in.
+	 */
+	private function newsQueryArgs(): array {
+		$every = 'all' === $this->options->str( 'schema.news_scope', 'term' );
+		$rule  = $every ? [] : $this->newsTaxQuery();
+		if ( ! $every && ! $rule ) {
+			return [];
+		}
+		$excluded = [];
+		foreach ( [ 'category' => 'sitemaps.news_exclude_categories', 'post_tag' => 'sitemaps.news_exclude_tags' ] as $taxonomy => $setting ) {
+			$slugs = array_values( array_filter( array_map( 'strval', $this->options->arr( $setting ) ) ) );
+			if ( $slugs ) {
+				$excluded[] = [ 'taxonomy' => $taxonomy, 'field' => 'slug', 'terms' => $slugs, 'operator' => 'NOT IN' ];
+			}
+		}
+
+		$args = [ 'date_query' => self::newsDateQuery() ];
+		if ( $excluded ) {
+			$args['tax_query'] = array_merge( [ 'relation' => 'AND' ], $rule ? [ $rule ] : [], $excluded ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+		} elseif ( $rule ) {
+			$args['tax_query'] = $rule; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+		}
+		$authors = [];
+		foreach ( $this->options->arr( 'sitemaps.news_exclude_authors' ) as $slug ) {
+			$user = $this->checked( static fn() => get_user_by( 'slug', (string) $slug ) );
+			if ( is_object( $user ) && ! empty( $user->ID ) ) {
+				$authors[] = (int) $user->ID;
+			}
+		}
+		if ( $authors ) {
+			$args['author__not_in'] = $authors;
+		}
+		return $args;
 	}
 
 	/** @return array<int|string,mixed> */

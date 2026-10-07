@@ -54,6 +54,7 @@ final class Options {
 				'org_name'         => '',             // Falls back to site name.
 				'org_logo'         => '',             // Falls back to site icon.
 				'person_id'        => 0,
+				'news_scope'       => 'term', // 'term' = posts in the News category/tag below; 'all' = every post.
 				'news_term'        => 'News', // Fallback when no category/tag slug is chosen.
 				'news_category'    => '',     // Category slug.
 				'news_tag'         => '',     // Tag slug.
@@ -86,6 +87,10 @@ final class Options {
 				'images'       => true,
 				'news_enabled' => true,
 				'per_page'     => 1000,
+				// Left out of the News sitemap (slugs; categories include their subcategories).
+				'news_exclude_categories' => [],
+				'news_exclude_tags'       => [],
+				'news_exclude_authors'    => [], // Author URL slugs (user_nicename).
 			],
 			'indexnow'     => [
 				'enabled' => false,

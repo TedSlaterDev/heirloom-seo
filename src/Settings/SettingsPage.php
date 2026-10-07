@@ -20,6 +20,17 @@ defined( 'ABSPATH' ) || exit;
  */
 final class SettingsPage implements ModuleInterface {
 
+	/** Settings that decide only what the News sitemap lists. */
+	private const NEWS_SETTINGS = [
+		'schema.news_scope',
+		'schema.news_category',
+		'schema.news_tag',
+		'schema.news_term',
+		'sitemaps.news_exclude_categories',
+		'sitemaps.news_exclude_tags',
+		'sitemaps.news_exclude_authors',
+	];
+
 	private const GROUP = 'heirloom_seo_group';
 	private const PAGE  = 'heirloom-seo';
 
@@ -398,9 +409,39 @@ final class SettingsPage implements ModuleInterface {
 				$this->checkboxRow( __( 'Authors', 'heirloom-seo' ), 'sitemaps.authors', __( 'Include author archives', 'heirloom-seo' ) );
 				$this->inputRow( __( 'URLs per page', 'heirloom-seo' ), 'sitemaps.per_page', 'number', '1000' );
 				$this->help( __( 'Google News — what counts as news (drives the News sitemap and NewsArticle schema)', 'heirloom-seo' ) );
-				$this->termDropdownRow( __( 'News category', 'heirloom-seo' ), 'schema.news_category', 'category', __( 'Posts in this category appear in the News sitemap.', 'heirloom-seo' ) );
-				$this->termDropdownRow( __( 'News tag', 'heirloom-seo' ), 'schema.news_tag', 'post_tag', __( 'Posts with this tag appear in the News sitemap.', 'heirloom-seo' ) );
-				$this->inputRow( __( 'Fallback term name', 'heirloom-seo' ), 'schema.news_term', 'text', 'News', __( 'Used only when no category or tag is selected above.', 'heirloom-seo' ) );
+				$this->selectRow(
+					__( 'News posts', 'heirloom-seo' ),
+					'schema.news_scope',
+					[
+						'term' => __( 'Posts in the News category or tag', 'heirloom-seo' ),
+						'all'  => __( 'Every post', 'heirloom-seo' ),
+					]
+				);
+				// The category/tag pickers apply only to "Posts in the News category or tag" (shown once that is saved; their values are kept).
+				if ( 'all' !== $this->options->str( 'schema.news_scope', 'term' ) ) {
+					$this->termDropdownRow( __( 'News category', 'heirloom-seo' ), 'schema.news_category', 'category', __( 'Posts in this category appear in the News sitemap.', 'heirloom-seo' ) );
+					$this->termDropdownRow( __( 'News tag', 'heirloom-seo' ), 'schema.news_tag', 'post_tag', __( 'Posts with this tag appear in the News sitemap.', 'heirloom-seo' ) );
+					$this->inputRow( __( 'Fallback term name', 'heirloom-seo' ), 'schema.news_term', 'text', 'News', __( 'Used only when no category or tag is selected above.', 'heirloom-seo' ) );
+				}
+				$this->help( __( 'Google News — leave out (the News sitemap only; separate several with commas)', 'heirloom-seo' ) );
+				$this->slugListRow(
+					__( 'Exclude categories', 'heirloom-seo' ),
+					'sitemaps.news_exclude_categories',
+					__( 'Category names or slugs. Their subcategories are left out too.', 'heirloom-seo' ),
+					static fn( string $slug ): bool => (bool) term_exists( $slug, 'category' )
+				);
+				$this->slugListRow(
+					__( 'Exclude tags', 'heirloom-seo' ),
+					'sitemaps.news_exclude_tags',
+					__( 'Tag names or slugs.', 'heirloom-seo' ),
+					static fn( string $slug ): bool => (bool) term_exists( $slug, 'post_tag' )
+				);
+				$this->slugListRow(
+					__( 'Exclude authors', 'heirloom-seo' ),
+					'sitemaps.news_exclude_authors',
+					__( 'Author names or the slug from their author page URL (/author/slug/).', 'heirloom-seo' ),
+					static fn( string $slug ): bool => false !== get_user_by( 'slug', $slug )
+				);
 				break;
 
 			case 'ai':
@@ -577,11 +618,50 @@ final class SettingsPage implements ModuleInterface {
 		if ( self::changed( $before, $after, [ 'sitemaps.per_page', 'sitemaps.images', 'sitemaps.post_types' ] ) ) {
 			Sitemaps::markAllPagesChanged(); // Every post page's contents changed.
 		}
-		if ( self::changed( $before, $after, [ 'sitemaps', 'schema.news_category', 'schema.news_tag', 'schema.news_term' ] ) ) {
+		// The News rules only decide the News sitemap and whether the index lists it.
+		$purge = self::changed( self::without( $before, self::NEWS_SETTINGS ), self::without( $after, self::NEWS_SETTINGS ), [ 'sitemaps' ] );
+		if ( $purge ) {
 			FileCache::purge();
-		} elseif ( self::changed( $before, $after, [ 'ai' ] ) ) {
+		} elseif ( self::changed( $before, $after, self::NEWS_SETTINGS ) ) {
+			FileCache::markStale( 'news', 'index' );
+		}
+		if ( ! $purge && self::changed( $before, $after, [ 'ai' ] ) ) {
 			LlmsTxt::forgetCachedBody();
 		}
+	}
+
+	/**
+	 * Comma- or line-separated names or slugs → unique slugs ("Press Release"
+	 * becomes press-release, as WordPress makes slugs).
+	 *
+	 * @param mixed $raw
+	 * @return string[]
+	 */
+	private static function slugList( $raw ): array {
+		$items = is_array( $raw ) ? $raw : preg_split( '/[,\r\n]+/', (string) $raw );
+		$slugs = [];
+		foreach ( (array) $items as $item ) {
+			$slug = sanitize_title( trim( (string) $item ) );
+			if ( '' !== $slug ) {
+				$slugs[ $slug ] = $slug;
+			}
+		}
+		return array_values( $slugs );
+	}
+
+	/**
+	 * @param array<string,mixed> $array
+	 * @param string[]            $paths section.key paths to drop
+	 * @return array<string,mixed>
+	 */
+	private static function without( array $array, array $paths ): array {
+		foreach ( $paths as $path ) {
+			[ $section, $key ] = array_pad( explode( '.', $path, 2 ), 2, '' );
+			if ( isset( $array[ $section ] ) && is_array( $array[ $section ] ) ) {
+				unset( $array[ $section ][ $key ] );
+			}
+		}
+		return $array;
 	}
 
 	/**
@@ -629,6 +709,7 @@ final class SettingsPage implements ModuleInterface {
 			'schema.org_logo'                => 'url',
 			'schema.person_id'               => 'int',
 			'schema.news_term'               => 'text',
+			'schema.news_scope'              => 'enum:term,all',
 			'schema.news_category'           => 'text',
 			'schema.news_tag'                => 'text',
 			'schema.address_street'          => 'text',
@@ -654,6 +735,9 @@ final class SettingsPage implements ModuleInterface {
 			'sitemaps.images'                => 'bool',
 			'sitemaps.authors'               => 'bool',
 			'sitemaps.per_page'              => 'intrange:1:50000',
+			'sitemaps.news_exclude_categories' => 'slugs',
+			'sitemaps.news_exclude_tags'       => 'slugs',
+			'sitemaps.news_exclude_authors'    => 'slugs',
 			'redirects.attachments'          => 'bool',
 			'redirects.target'               => 'enum:parent,file',
 			'feed.rss_attribution'           => 'bool',
@@ -694,6 +778,9 @@ final class SettingsPage implements ModuleInterface {
 		if ( str_starts_with( $type, 'intrange:' ) ) {
 			[ , $min, $max ] = explode( ':', $type );
 			return max( (int) $min, min( (int) $max, (int) $raw ) );
+		}
+		if ( 'slugs' === $type ) {
+			return self::slugList( $raw );
 		}
 		return match ( $type ) {
 			'textarea' => sanitize_textarea_field( (string) $raw ),
@@ -823,6 +910,31 @@ final class SettingsPage implements ModuleInterface {
 			esc_attr( $placeholder ),
 			'' !== $help ? '<p class="description">' . esc_html( $help ) . '</p>' : ''
 		);
+	}
+
+	/**
+	 * A comma-separated list of slugs, saved as an array. Saved entries that
+	 * match nothing on this site are listed under the field.
+	 *
+	 * @param callable(string): bool $exists
+	 */
+	private function slugListRow( string $label, string $path, string $help, callable $exists ): void {
+		$id    = $this->id( $path );
+		$slugs = array_map( 'strval', $this->options->arr( $path ) );
+		printf(
+			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input type="text" id="%1$s" name="%3$s" value="%4$s" class="large-text" /><p class="description">%5$s</p>',
+			esc_attr( $id ),
+			esc_html( $label ),
+			esc_attr( $this->name( $path ) ),
+			esc_attr( implode( ', ', $slugs ) ),
+			esc_html( $help )
+		);
+		$missing = array_values( array_filter( $slugs, static fn( string $slug ): bool => ! $exists( $slug ) ) );
+		if ( $missing ) {
+			/* translators: %s: comma-separated slugs */
+			echo '<p class="description" style="color:#b32d2e">' . esc_html( sprintf( __( 'Not found on this site (ignored): %s', 'heirloom-seo' ), implode( ', ', $missing ) ) ) . '</p>';
+		}
+		echo '</td></tr>';
 	}
 
 	private function textareaRow( string $label, string $path, string $help = '', int $rows = 5 ): void {

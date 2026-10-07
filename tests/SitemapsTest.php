@@ -1002,11 +1002,26 @@ final class SitemapsTest extends TestCase {
 		self::assertTrue( $this->isFresh( 'sub_pt_post_1' ), 'llms.txt setting: sitemaps kept' );
 		self::assertSame( [ null, false ], FileCache::lookup( 'llms', 0 ) );
 
-		foreach ( [ 'schema' => [ 'news_tag' => 'breaking' ], 'sitemaps' => [ 'authors' => true ] ] as $section => $change ) {
+		$fresh();
+		SettingsPage::onSettingsWritten( $defaults, $with( [ 'sitemaps' => [ 'authors' => true ] ] ) );
+		self::assertTrue( $this->isStale( 'sub_pt_post_1' ), 'a sitemap setting: every sitemap rebuilds (stale copies kept)' );
+		self::assertArrayNotHasKey( Sitemaps::LASTMOD_OPTION, $this->store, "post pages' contents didn't change" );
+
+		// 0.7.24: the News rules decide only the News sitemap and whether the index lists it.
+		$news_changes = [
+			[ 'schema' => [ 'news_tag' => 'breaking' ] ],
+			[ 'sitemaps' => [ 'news_exclude_tags' => [ 'sponsored' ] ] ],
+			[ 'sitemaps' => [ 'news_exclude_categories' => [ 'opinion' ] ] ],
+			[ 'sitemaps' => [ 'news_exclude_authors' => [ 'guest-writer' ] ] ],
+		];
+		foreach ( $news_changes as $change ) {
 			$fresh();
-			SettingsPage::onSettingsWritten( $defaults, $with( [ $section => $change ] ) );
-			self::assertTrue( $this->isStale( 'sub_pt_post_1' ), "{$section}: every sitemap rebuilds (stale copies kept)" );
-			self::assertArrayNotHasKey( Sitemaps::LASTMOD_OPTION, $this->store, "{$section}: post pages' contents didn't change" );
+			SettingsPage::onSettingsWritten( $defaults, $with( $change + [ 'ai' => [ 'llms_intro' => 'Changed too' ] ] ) );
+			$label = (string) json_encode( $change );
+			self::assertTrue( $this->isStale( 'news' ), $label );
+			self::assertTrue( $this->isStale( 'index' ), $label );
+			self::assertTrue( $this->isFresh( 'sub_pt_post_1' ), "{$label}: post pages untouched" );
+			self::assertSame( [ null, false ], FileCache::lookup( 'llms', 0 ), "{$label}: an llms.txt change alongside still counts" );
 		}
 
 		foreach ( [ [ 'per_page' => 3 ], [ 'images' => false ] ] as $change ) {
@@ -1490,6 +1505,199 @@ final class SitemapsTest extends TestCase {
 		$built            = $sm->build( 'index', '', 0 );
 
 		self::assertStringContainsString( 'sitemap-pt_post-3.xml', $built['body'] );
+	}
+
+	// --- 0.7.24: nginx page caches and News exclusions -------------------
+
+	/**
+	 * nginx page caches take X-Accel-Expires over Cache-Control, and one
+	 * managed host's platform set 3 hours on every sitemap before
+	 * Heirloom answered — so TGP's News sitemap could be 3 hours old (or
+	 * empty, from one bad moment) for Googlebot. Each response now carries
+	 * its own X-Accel-Expires, replacing the host's.
+	 */
+	public function test_every_sitemap_response_tells_nginx_how_long_to_keep_it(): void {
+		$headers = static fn( int $status, int $max_age ): array => Sitemaps::responseHeaders( [ 'status' => $status, 'body' => '', 'max_age' => $max_age ] );
+
+		foreach ( [ 300, 900, 3600, 60 ] as $max_age ) { // News, index, pages, the stale fallback.
+			self::assertContains( "Cache-Control: public, max-age={$max_age}", $headers( 200, $max_age ) );
+			self::assertContains( "X-Accel-Expires: {$max_age}", $headers( 200, $max_age ) );
+		}
+		self::assertContains( 'X-Accel-Expires: 0', $headers( 503, 0 ), 'a 503 is never kept' );
+		self::assertContains( 'X-Accel-Expires: 60', $headers( 404, 0 ), 'a missing page may exist soon (the next page of posts)' );
+
+		$this->seed( 2 );
+		$r = $this->sitemaps()->respond( 'news', '', 0 );
+		self::assertContains( 'X-Accel-Expires: 300', Sitemaps::responseHeaders( $r ) );
+	}
+
+	public function test_news_sitemap_leaves_out_excluded_categories_tags_and_authors(): void {
+		$this->seed( 2 );
+		$this->store[ Options::OPTION ]['schema']   = [ 'news_category' => 'news' ];
+		$this->store[ Options::OPTION ]['sitemaps'] += [
+			'news_exclude_categories' => [ 'opinion', 'sponsored-content' ],
+			'news_exclude_tags'       => [ 'press-release' ],
+			'news_exclude_authors'    => [ 'guest-writer', 'nobody-by-that-slug' ],
+		];
+		Functions\when( 'get_user_by' )->alias( static fn( $field, $slug ) => 'slug' === $field && 'guest-writer' === $slug ? (object) [ 'ID' => 42 ] : false );
+
+		$this->sitemaps()->respond( 'news', '', 0 );
+		$this->sitemaps()->respond( 'index', '', 0 );
+
+		self::assertCount( 2, WP_Query::$built, 'the News sitemap and the index both query' );
+		foreach ( WP_Query::$built as $args ) {
+			self::assertSame(
+				[
+					'relation' => 'AND',
+					[ 'relation' => 'OR', [ 'taxonomy' => 'category', 'field' => 'slug', 'terms' => 'news' ] ],
+					[ 'taxonomy' => 'category', 'field' => 'slug', 'terms' => [ 'opinion', 'sponsored-content' ], 'operator' => 'NOT IN' ],
+					[ 'taxonomy' => 'post_tag', 'field' => 'slug', 'terms' => [ 'press-release' ], 'operator' => 'NOT IN' ],
+				],
+				$args['tax_query']
+			);
+			self::assertSame( [ 42 ], $args['author__not_in'], 'an author slug that matches nobody is ignored' );
+		}
+	}
+
+	public function test_without_exclusions_the_news_query_is_unchanged(): void {
+		$this->seed( 2 );
+		$this->store[ Options::OPTION ]['schema'] = [ 'news_category' => 'news' ];
+
+		$this->sitemaps()->respond( 'news', '', 0 );
+
+		$args = WP_Query::$built[0];
+		self::assertSame( [ 'relation' => 'OR', [ 'taxonomy' => 'category', 'field' => 'slug', 'terms' => 'news' ] ], $args['tax_query'] );
+		self::assertArrayNotHasKey( 'author__not_in', $args );
+	}
+
+	public function test_a_failed_author_lookup_doesnt_cache_a_news_sitemap_listing_that_author(): void {
+		$this->seed( 2 );
+		$this->store[ Options::OPTION ]['schema']                               = [ 'news_category' => 'news' ];
+		$this->store[ Options::OPTION ]['sitemaps']['news_exclude_authors']     = [ 'guest-writer' ];
+		Functions\when( 'get_user_by' )->alias( fn() => $this->failRead( "SELECT * FROM wp_users WHERE user_nicename = 'guest-writer' LIMIT 1", false ) );
+		FileCache::put( 'news', '<previous-news/>' );
+		FileCache::markStale( 'news' );
+
+		$r = $this->sitemaps()->respond( 'news', '', 0 );
+
+		self::assertSame( '<previous-news/>', $r['body'] );
+		self::assertTrue( $this->isStale( 'news' ) );
+	}
+
+	public function test_exclusion_settings_are_saved_as_slugs_and_unknown_ones_are_flagged(): void {
+		Functions\when( 'sanitize_title' )->alias( static fn( $t ) => trim( (string) preg_replace( '/[^a-z0-9]+/', '-', strtolower( (string) $t ) ), '-' ) );
+		$page = new SettingsPage( new Options() );
+
+		$saved = $page->sanitize(
+			[
+				'sitemaps' => [
+					'news_exclude_categories' => "Opinion, sponsored-content,\nOpinion",
+					'news_exclude_tags'       => ' , ',
+					'news_exclude_authors'    => 'Guest Writer',
+				],
+			]
+		);
+		self::assertSame( [ 'opinion', 'sponsored-content' ], $saved['sitemaps']['news_exclude_categories'] );
+		self::assertSame( [], $saved['sitemaps']['news_exclude_tags'], 'emptying the field clears the list' );
+		self::assertSame( [ 'guest-writer' ], $saved['sitemaps']['news_exclude_authors'] );
+
+		// The field lists saved entries that match nothing on this site.
+		$this->store[ Options::OPTION ] = $saved;
+		Functions\when( 'esc_attr' )->returnArg( 1 );
+		Functions\when( 'esc_html' )->returnArg( 1 );
+		$row = new \ReflectionMethod( SettingsPage::class, 'slugListRow' );
+		ob_start();
+		$row->invoke( new SettingsPage( new Options() ), 'Exclude categories', 'sitemaps.news_exclude_categories', 'help', static fn( string $slug ): bool => 'opinion' === $slug );
+		$html = (string) ob_get_clean();
+		self::assertStringContainsString( 'value="opinion, sponsored-content"', $html );
+		self::assertStringContainsString( 'Not found on this site (ignored): sponsored-content', $html );
+	}
+
+	// --- 0.7.25: "Every post" counts as news ----------------------------
+
+	public function test_every_post_mode_queries_all_recent_posts_minus_exclusions(): void {
+		$this->seed( 2 );
+		$this->store[ Options::OPTION ]['schema'] = [ 'news_scope' => 'all', 'news_category' => 'news' ]; // The category is kept but unused.
+
+		$this->sitemaps()->respond( 'news', '', 0 );
+		$this->sitemaps()->respond( 'index', '', 0 );
+
+		self::assertCount( 2, WP_Query::$built, 'the News sitemap and the index both query' );
+		foreach ( WP_Query::$built as $args ) {
+			self::assertArrayNotHasKey( 'tax_query', $args, 'no category or tag restriction' );
+			self::assertSame( 'post_date_gmt', $args['date_query'][1]['column'], 'still the last 48 hours' );
+		}
+
+		WP_Query::$built = [];
+		FileCache::markStale( 'news' );
+		$this->store[ Options::OPTION ]['sitemaps'] += [ 'news_exclude_categories' => [ 'sponsored' ], 'news_exclude_tags' => [ 'promoted' ] ];
+		$this->sitemaps()->respond( 'news', '', 0 );
+		self::assertSame(
+			[
+				'relation' => 'AND',
+				[ 'taxonomy' => 'category', 'field' => 'slug', 'terms' => [ 'sponsored' ], 'operator' => 'NOT IN' ],
+				[ 'taxonomy' => 'post_tag', 'field' => 'slug', 'terms' => [ 'promoted' ], 'operator' => 'NOT IN' ],
+			],
+			WP_Query::$built[0]['tax_query']
+		);
+	}
+
+	public function test_every_post_mode_needs_no_news_term(): void {
+		$this->seed( 2 );
+		$this->store[ Options::OPTION ]['schema'] = [ 'news_scope' => 'all', 'news_term' => '' ]; // No category, tag or fallback name.
+
+		$this->sitemaps()->respond( 'news', '', 0 );
+
+		self::assertCount( 1, WP_Query::$built, 'term mode would have returned an empty News sitemap without querying' );
+	}
+
+	public function test_every_post_mode_makes_every_post_a_news_article(): void {
+		Functions\when( 'has_term' )->justReturn( false );
+		Functions\when( 'get_the_terms' )->justReturn( [] );
+		$is_news = new \ReflectionMethod( \OrchardGrove\HeirloomSeo\Modules\Schema\Schema::class, 'isNews' );
+		$post    = $this->post( 101 );
+
+		$this->store[ Options::OPTION ]['schema'] = [ 'news_category' => 'news' ];
+		self::assertFalse( $is_news->invoke( new \OrchardGrove\HeirloomSeo\Modules\Schema\Schema( new Options() ), $post ), 'term mode: not in the News category' );
+
+		$this->store[ Options::OPTION ]['schema'] = [ 'news_scope' => 'all', 'news_category' => 'news' ];
+		self::assertTrue( $is_news->invoke( new \OrchardGrove\HeirloomSeo\Modules\Schema\Schema( new Options() ), $post ) );
+	}
+
+	public function test_news_scope_setting_saves_refreshes_and_hides_the_term_pickers(): void {
+		$page = new SettingsPage( new Options() );
+		self::assertSame( 'all', $page->sanitize( [ 'schema' => [ 'news_scope' => 'all' ] ] )['schema']['news_scope'] );
+		self::assertSame( 'term', $page->sanitize( [ 'schema' => [ 'news_scope' => 'bogus' ] ] )['schema']['news_scope'] );
+
+		$this->cachePages( 1 );
+		$defaults = ( new Options() )->defaults();
+		SettingsPage::onSettingsWritten( $defaults, array_replace_recursive( $defaults, [ 'schema' => [ 'news_scope' => 'all' ] ] ) );
+		self::assertTrue( $this->isStale( 'news' ) );
+		self::assertTrue( $this->isStale( 'index' ) );
+		self::assertTrue( $this->isFresh( 'sub_pt_post_1' ), 'post pages untouched' );
+
+		foreach ( [ 'esc_attr', 'esc_html', 'esc_html__' ] as $fn ) {
+			Functions\when( $fn )->returnArg( 1 );
+		}
+		Functions\when( 'selected' )->justReturn( '' );
+		Functions\when( 'checked' )->justReturn( '' );
+		Functions\when( 'get_terms' )->justReturn( [] );
+		Functions\when( 'term_exists' )->justReturn( false );
+		Functions\when( 'get_user_by' )->justReturn( false );
+		$render = function ( string $scope ): string {
+			$this->store[ Options::OPTION ]['schema'] = [ 'news_scope' => $scope ];
+			$tab                                      = new \ReflectionMethod( SettingsPage::class, 'renderTab' );
+			ob_start();
+			$tab->invoke( new SettingsPage( new Options() ), 'sitemaps' );
+			return (string) ob_get_clean();
+		};
+		$term = $render( 'term' );
+		$all  = $render( 'all' );
+		self::assertStringContainsString( 'Every post', $term );
+		self::assertStringContainsString( 'heirloom_seo[schema][news_category]', $term );
+		self::assertStringNotContainsString( 'heirloom_seo[schema][news_category]', $all, 'the category/tag pickers apply only to the term mode' );
+		self::assertStringNotContainsString( 'heirloom_seo[schema][news_term]', $all );
+		self::assertStringContainsString( 'Exclude categories', $all, 'exclusions stay available' );
 	}
 
 	public function test_critic_posts_filtered_out_keep_their_slot(): void {

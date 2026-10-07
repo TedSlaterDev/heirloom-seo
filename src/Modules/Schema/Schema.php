@@ -516,6 +516,9 @@ final class Schema implements ModuleInterface {
 	}
 
 	private function isNews( WP_Post $post ): bool {
+		if ( 'all' === $this->options->str( 'schema.news_scope', 'term' ) ) {
+			return true; // Every post counts as news (a post's own schema-type override still wins).
+		}
 		$category = $this->options->str( 'schema.news_category' );
 		$tag      = $this->options->str( 'schema.news_tag' );
 

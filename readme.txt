@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.23
+Stable tag: 0.7.25
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -81,6 +81,14 @@ them after a confirmation, and `--exclude=<ids>` to skip posts you've changed
 on purpose since the import.
 
 == Changelog ==
+
+= 0.7.25 =
+* New: Sitemaps → "News posts" can be set to "Every post", for news sites where everything published is news. The Google News sitemap then lists every post from the last 48 hours, minus the excluded categories, tags and authors (use those to leave out sponsored or promoted posts), and every post gets NewsArticle schema; a post's own schema type in the Heirloom box still wins. The default stays "Posts in the News category or tag", and its category and tag choices are kept while "Every post" is on.
+
+= 0.7.24 =
+* Fixed: on hosts whose nginx page cache sets its own cache time (some managed hosts keep any URL like a sitemap for 3 hours, and nginx obeys that over the plugin's Cache-Control header), sitemaps were kept far longer than intended: new articles reached Google's view of the News sitemap up to 3 hours late, and one bad moment could leave an empty News sitemap in the cache for hours. Every sitemap response now also sends X-Accel-Expires with its own cache time (5 minutes for the News sitemap, 15 for the index, 1 hour for sitemap pages, 1 minute for a page that doesn't exist yet), replacing the host's value.
+* New: leave chosen categories (with their subcategories), tags and authors out of the Google News sitemap, under Sitemaps → "Google News — leave out". Enter names or slugs separated by commas; entries that match nothing on the site are flagged under the field. The sitemap index stops listing the News sitemap when every recent news post is excluded.
+* Changed: changing which posts count as news (the News category, tag or fallback name) or the new exclusions now refreshes only the News sitemap and the index, instead of every sitemap.
 
 = 0.7.23 =
 * Fixed: the Google News sitemap's 48-hour window was off by the site's time zone. WordPress read "48 hours ago" in the site's time zone but compared it with each post's UTC publish time, so a site on US Eastern time listed posts for about 52 hours, and a site east of UTC for less than 48 (about 39 hours in Japan). The window is now exactly 48 hours on every site. The sitemap index uses the same window when deciding whether to list the News sitemap.
