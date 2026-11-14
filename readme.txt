@@ -4,7 +4,7 @@ Tags: seo, schema, sitemap, opengraph, indexnow
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 0.7.25
+Stable tag: 0.7.29
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
  
@@ -64,7 +64,10 @@ notice will warn you if another is active.
 
 = Where is the sitemap? =
 
-At `/sitemap.xml`. It replaces the core WordPress sitemap.
+At `/sitemap.xml`. It replaces the core WordPress sitemap. Yoast SEO's
+sitemap URLs (`/sitemap_index.xml`, `/post-sitemap.xml` and the rest, which
+Rank Math uses too) redirect to it, so an old robots.txt or Search Console
+entry keeps working after a switch.
 
 = Which engines get IndexNow pings? =
 
@@ -81,6 +84,24 @@ them after a confirmation, and `--exclude=<ids>` to skip posts you've changed
 on purpose since the import.
 
 == Changelog ==
+
+= 0.7.29 =
+* Fixed: switching from Yoast SEO changed every title on the site, because Heirloom's title formats differ from Yoast's: posts gained "by" and the author's name, category and tag archives lost "Archives", the separator became an en dash instead of Yoast's hyphen, and paginated pages lost "Page 2 of 5". When Heirloom is first activated, and when you run the Yoast import, Yoast's title formats and separator now replace Heirloom's wherever Heirloom's are still the defaults; one you have edited in Heirloom stays. On a site already running Heirloom, run the Yoast import again; `wp heirloom-seo import yoast --dry-run` first lists what would change. Heirloom has one format for every post type other than pages and one for every taxonomy, so those come from Yoast's Posts and Categories formats (the import warns when Yoast's Tags format was different). A Yoast format using a variable Heirloom doesn't have, such as %%currentyear%%, is left out and named by the import. Date archives keep WordPress's "Month: November 2026" where Yoast printed "November 2026".
+* New: the %pagination% title variable prints "– Page 2 of 5" (with your separator) from page 2 on and nothing on page 1, as Yoast's %%page%% does. %page% still prints just the number. Posts' own Yoast titles imported from now on use %pagination% for %%page%%, and the import now also understands Yoast's %%name%%, %%searchphrase%%, %%term_title%%, %%archive_title%%, %%primary_category%% and %%pagenumber%%.
+
+= 0.7.28 =
+* Fixed: switching from Yoast SEO dropped the site verification codes entered in Yoast (Google Search Console, Bing, Pinterest, Baidu), so their meta tags disappeared from the home page, and a search console verified that way eventually drops the site's verified ownership when its periodic check finds no tag. When Heirloom is first activated, and when you run the Yoast import, Yoast's codes now fill Heirloom's empty verification fields (Social tab); a code already entered in Heirloom stays. On a site already running Heirloom, run the Yoast import again, or copy the codes over by hand. Heirloom has no setting for Yandex and Ahrefs codes; the import warns when Yoast has one, so you can verify the site with those services another way, such as a DNS record.
+* New: the Yoast import says which settings it carried over, under the progress bar on the Tools tab and in `wp heirloom-seo import yoast` (`--dry-run` lists them without saving).
+
+= 0.7.27 =
+* Fixed: after a switch from Yoast SEO, its sitemap URLs answered 404, including /sitemap_index.xml, which the old robots.txt and Search Console point at. /sitemap_index.xml now redirects (301) to /sitemap.xml, and Yoast's sitemaps per type (post-sitemap.xml, page-sitemap.xml, category-sitemap.xml, post-sitemap2.xml …) to Heirloom's sitemap of the same type and page, or to /sitemap.xml when there is none. Rank Math uses the same names, so those work too. Like the sitemaps, the redirects are off while the XML sitemap is turned off and answer 404 while search engines are discouraged. They start working after the first admin page load following the update.
+* Fixed: a site switching from Yoast SEO with Yoast's RSS "before" and "after" text both empty suddenly had "The post … appeared first on …" added to every feed item, and to email newsletters built from the feed, because Heirloom's RSS attribution is on by default. When Heirloom is first activated, and when you run the Yoast import, it now turns RSS attribution off if Yoast's RSS texts are both empty; otherwise the default stays. An RSS attribution setting already saved in Heirloom is never changed. On a site already running Heirloom, untick Advanced → RSS attribution, or run the Yoast import again.
+
+= 0.7.26 =
+* Changed: Heirloom now follows Settings → Reading → "Discourage search engines from indexing this site", as WordPress does with its own sitemaps. While it is ticked, the XML and Google News sitemaps and /llms.txt answer 404, robots.txt has no Sitemap line, nothing is sent to IndexNow, and the /llms.txt and IndexNow key files Heirloom wrote to the site root are removed. The sitemap cache stays up to date in the background, so unticking the setting brings everything back within a minute (caches keep those 404s for 60 seconds at most), both files included. A change made without saving the setting, such as a database copied to a staging site, a direct database edit or code that filters the option, is picked up on the next admin page load. Pages already say noindex in that state, as before.
+* New: SEO Health shows "Search engine visibility" while search engines are discouraged: an error on a production site (where it would tell search engines to drop the site), a note on staging and development sites. The sitemap and IndexNow items say nothing is served or sent, and the sitemap and IndexNow key-file reachability checks are skipped in that state, since those URLs answer 404 on purpose.
+* Fixed: on a staging copy made on the same server as the live site (files and database copied together), saving Heirloom's settings, turning IndexNow off, or deactivating or deleting Heirloom on the copy could delete the live site's IndexNow key file (and, on deletion, its /llms.txt), because the copied database pointed at the live site's files. Heirloom now only removes files at the site's own paths.
+* Fixed: `wp heirloom-seo indexnow submit --post=<id>` was refused by WP-CLI ("Too many positional arguments") and never ran. It now also refuses while IndexNow is turned off.
 
 = 0.7.25 =
 * New: Sitemaps → "News posts" can be set to "Every post", for news sites where everything published is news. The Google News sitemap then lists every post from the last 48 hours, minus the excluded categories, tags and authors (use those to leave out sponsored or promoted posts), and every post gets NewsArticle schema; a post's own schema type in the Heirloom box still wins. The default stays "Posts in the News category or tag", and its category and tag choices are kept while "Every post" is on.

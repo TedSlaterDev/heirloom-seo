@@ -110,7 +110,11 @@ final class Robots implements ModuleInterface {
 	}
 
 	public function filterRobotsTxt( string $output, bool $public ): string {
-		if ( $this->options->bool( 'sitemaps.enabled' ) ) {
+		// No Sitemap line while search engines are discouraged (Settings → Reading):
+		// the sitemaps aren't served then. Core keeps robots.txt as it is in that
+		// state (since WP 5.3 it no longer disallows everything, so crawlers can
+		// read each page's noindex), and so do the site's own rules below.
+		if ( $public && $this->options->bool( 'sitemaps.enabled' ) ) {
 			$output .= "\nSitemap: " . esc_url( home_url( '/sitemap.xml' ) ) . "\n";
 		}
 

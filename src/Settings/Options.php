@@ -191,10 +191,13 @@ final class Options {
 		update_option( self::OPTION, $data, true );
 	}
 
-	public function seedDefaults(): void {
+	/** @return bool Whether the option was created (the plugin's first activation on this site). */
+	public function seedDefaults(): bool {
 		if ( false === get_option( self::OPTION, false ) ) {
 			add_option( self::OPTION, [], '', 'yes' );
+			return true;
 		}
+		return false;
 	}
 
 	private function merged(): array {

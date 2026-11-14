@@ -5,6 +5,7 @@ namespace OrchardGrove\HeirloomSeo\Modules\IndexNow;
 
 use OrchardGrove\HeirloomSeo\ModuleInterface;
 use OrchardGrove\HeirloomSeo\Settings\Options;
+use OrchardGrove\HeirloomSeo\Support\Visibility;
 use WP_Post;
 
 defined( 'ABSPATH' ) || exit;
@@ -13,6 +14,9 @@ defined( 'ABSPATH' ) || exit;
  * IndexNow: pings Bing/Yandex/etc. (not Google) when content is published,
  * updated, or unpublished. URLs are batched per request and submitted
  * non-blocking on shutdown. Serves the {key}.txt verification file.
+ *
+ * While search engines are discouraged (Settings → Reading) nothing is
+ * submitted and there is no key file: the site has asked not to be indexed.
  */
 final class IndexNow implements ModuleInterface {
 
@@ -61,8 +65,11 @@ final class IndexNow implements ModuleInterface {
 			return;
 		}
 		$key = $this->key();
-		if ( '' === $key ) {
+		if ( '' === $key || Visibility::discouraged() ) {
 			status_header( 404 );
+			foreach ( Visibility::NOT_FOUND_HEADERS as $header ) {
+				header( $header );
+			}
 			exit;
 		}
 		header( 'Content-Type: text/plain; charset=utf-8' );
@@ -96,7 +103,7 @@ final class IndexNow implements ModuleInterface {
 		$this->queue = [];
 
 		$key = $this->key();
-		if ( '' === $key ) {
+		if ( '' === $key || Visibility::discouraged() ) {
 			return;
 		}
 		$host = wp_parse_url( home_url(), PHP_URL_HOST );
@@ -122,14 +129,17 @@ final class IndexNow implements ModuleInterface {
 		);
 	}
 
-	/** Submit URLs to IndexNow synchronously (used by WP-CLI). */
+	/**
+	 * Submit URLs to IndexNow synchronously (used by WP-CLI). Not while IndexNow
+	 * is turned off: the key may still be stored, but nothing serves its file.
+	 */
 	public function submitNow( array $urls ): bool {
 		$urls = array_values( array_filter( array_map( 'strval', $urls ) ) );
 		if ( ! $urls ) {
 			return false;
 		}
 		$key = $this->key();
-		if ( '' === $key ) {
+		if ( '' === $key || ! $this->options->bool( 'indexnow.enabled' ) || Visibility::discouraged() ) {
 			return false;
 		}
 		$host = wp_parse_url( home_url(), PHP_URL_HOST );
@@ -179,21 +189,27 @@ final class IndexNow implements ModuleInterface {
 
 	/**
 	 * Reconcile the physical {key}.txt with current settings: write it when
-	 * IndexNow is enabled with a usable key and root, else remove the one we own.
+	 * IndexNow is enabled with a usable key and root (and search engines aren't
+	 * discouraged), else remove the one we own. Also runs when the Settings →
+	 * Reading visibility changes (Plugin::onVisibilityChanged).
 	 */
 	public static function sync( Options $options ): void {
 		$key = $options->str( 'indexnow.key' );
 
-		if ( ! $options->bool( 'indexnow.enabled' ) || ! preg_match( self::KEY_PATTERN, $key ) ) {
+		if ( ! $options->bool( 'indexnow.enabled' ) || ! preg_match( self::KEY_PATTERN, $key ) || Visibility::discouraged() ) {
 			self::deleteStaticFile();
+			if ( Visibility::discouraged() && preg_match( self::KEY_PATTERN, $key ) ) {
+				self::deleteAdoptableFile( $key );
+			}
 			delete_option( self::FAILED_OPTION );
 			return;
 		}
 
 		$path = self::staticPath( $key );
 
-		// Key rotated (or the path filter moved): remove the file we owned under
-		// the old name before writing the new one, so we don't litter the root.
+		// Key rotated: remove the file we owned under the old name before writing
+		// the new one, so we don't litter the root (deleteStaticFile() only touches
+		// a path this site writes to).
 		$owned = (string) get_option( self::PATH_OPTION, '' );
 		if ( '' !== $owned && $owned !== $path ) {
 			self::deleteStaticFile();
@@ -263,19 +279,58 @@ final class IndexNow implements ModuleInterface {
 		}
 	}
 
-	/** Remove the physical key file — but only the one we created, at the path we recorded. */
+	/** True while a physical key file Heirloom wrote is on record. */
+	public static function ownsStaticFile(): bool {
+		return (bool) get_option( self::OWNED_OPTION );
+	}
+
+	/**
+	 * Remove the physical key file — but only the one we created, at the path we
+	 * recorded, and only when that is a path this site writes to. A database
+	 * copied to another install (a staging copy on the same server) carries the
+	 * source site's record: unlinking that path would take the key file off the
+	 * other site, so the record is dropped instead. (So is one left by a path
+	 * filter that has since changed; that old file stays where it is.)
+	 */
 	public static function deleteStaticFile(): void {
 		if ( ! get_option( self::OWNED_OPTION ) ) {
 			return;
 		}
 		$path = (string) get_option( self::PATH_OPTION, '' );
-		if ( '' === $path ) {
-			delete_option( self::OWNED_OPTION ); // nothing recorded to remove
+		if ( '' === $path || ! self::isOwnPath( $path ) ) {
+			delete_option( self::OWNED_OPTION );
+			delete_option( self::PATH_OPTION );
 			return;
 		}
 		if ( ! is_file( $path ) || @unlink( $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
 			delete_option( self::OWNED_OPTION );
 			delete_option( self::PATH_OPTION );
+		}
+	}
+
+	/** True when $path is where this site writes the key file for the key the filename names. */
+	private static function isOwnPath( string $path ): bool {
+		$key = basename( $path, '.txt' );
+		return 1 === preg_match( self::KEY_PATTERN, $key ) && self::staticPath( $key ) === $path;
+	}
+
+	/**
+	 * While search engines are discouraged, a key file at this site's own path
+	 * that holds exactly the key goes too, though none is on record: the copy a
+	 * database-and-files clone brought along, or one made by hand — the same file
+	 * blockedReason() would adopt. Anything else there is left alone.
+	 */
+	private static function deleteAdoptableFile( string $key ): void {
+		if ( is_multisite() ) {
+			return; // shared document root; Heirloom never manages the file there
+		}
+		$path = self::staticPath( $key );
+		if ( ! is_file( $path ) ) {
+			return;
+		}
+		$existing = @file_get_contents( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
+		if ( is_string( $existing ) && trim( $existing ) === $key ) {
+			@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
 		}
 	}
 

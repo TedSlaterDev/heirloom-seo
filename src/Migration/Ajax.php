@@ -46,12 +46,19 @@ final class Ajax implements ModuleInterface {
 				wp_send_json_error( [ 'message' => 'unknown source' ], 400 );
 			}
 
+			$notes = [];
+			if ( 0 === $offset && $source instanceof Yoast ) {
+				// Once per run, with the first batch.
+				$report = Yoast::carryOverReport( Yoast::carryOverSettings() );
+				$notes  = [ ...$report['notes'], ...$report['warnings'] ];
+			}
 			$result = ( new Importer() )->importBatch( $source, $offset, self::BATCH, $overwrite, false );
 			wp_send_json_success(
 				[
 					'imported' => $result['imported'],
 					'offset'   => $offset + self::BATCH,
 					'done'     => $result['ids'] < self::BATCH,
+					'notes'    => $notes, // Settings carried over, shown under the progress bar.
 				]
 			);
 		}

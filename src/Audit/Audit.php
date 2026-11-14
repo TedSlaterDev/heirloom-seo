@@ -5,6 +5,7 @@ namespace OrchardGrove\HeirloomSeo\Audit;
 
 use OrchardGrove\HeirloomSeo\Settings\Options;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
+use OrchardGrove\HeirloomSeo\Support\Visibility;
 use WP_Query;
 
 defined( 'ABSPATH' ) || exit;
@@ -25,6 +26,15 @@ final class Audit {
 	public function configChecks(): array {
 		$out = [];
 
+		$discouraged = Visibility::discouraged();
+		if ( $discouraged ) {
+			// wp_get_environment_type() is 'production' unless the host or wp-config says otherwise.
+			$env   = wp_get_environment_type();
+			$out[] = 'production' === $env
+				? [ 'status' => 'error', 'label' => __( 'Search engine visibility', 'heirloom-seo' ), 'detail' => __( 'Search engines are discouraged (Settings → Reading), so every page says noindex and Heirloom isn’t serving sitemaps or llms.txt or sending IndexNow pings. If this is the live site, untick “Discourage search engines from indexing this site” now.', 'heirloom-seo' ) ]
+				: [ 'status' => 'info', 'label' => __( 'Search engine visibility', 'heirloom-seo' ), 'detail' => sprintf( /* translators: %s: environment type, e.g. staging. */ __( 'Search engines are discouraged (Settings → Reading), as expected on a %s site. Untick it when the site goes live.', 'heirloom-seo' ), $env ) ];
+		}
+
 		$conflicts = $this->conflictingPlugins();
 		$out[]     = $conflicts
 			? [ 'status' => 'error', 'label' => __( 'Conflicting SEO plugin', 'heirloom-seo' ), 'detail' => sprintf( /* translators: %s: plugin names. */ __( '%s is active alongside Heirloom — disable it to avoid duplicate tags.', 'heirloom-seo' ), implode( ', ', $conflicts ) ) ]
@@ -39,14 +49,22 @@ final class Audit {
 			? [ 'status' => 'ok', 'label' => __( 'Schema identity', 'heirloom-seo' ), 'detail' => __( 'A logo / site icon is set for the Organization or Person.', 'heirloom-seo' ) ]
 			: [ 'status' => 'warn', 'label' => __( 'Schema identity', 'heirloom-seo' ), 'detail' => __( 'No logo or site icon — your schema identity is incomplete.', 'heirloom-seo' ) ];
 
-		$out[] = $this->options->bool( 'sitemaps.enabled' )
-			? [ 'status' => 'ok', 'label' => __( 'XML sitemap', 'heirloom-seo' ), 'detail' => sprintf( /* translators: %s: URL. */ __( 'Enabled at %s', 'heirloom-seo' ), home_url( '/sitemap.xml' ) ) ]
-			: [ 'status' => 'info', 'label' => __( 'XML sitemap', 'heirloom-seo' ), 'detail' => __( 'The sitemap is disabled.', 'heirloom-seo' ) ];
+		if ( ! $this->options->bool( 'sitemaps.enabled' ) ) {
+			$out[] = [ 'status' => 'info', 'label' => __( 'XML sitemap', 'heirloom-seo' ), 'detail' => __( 'The sitemap is disabled.', 'heirloom-seo' ) ];
+		} elseif ( $discouraged ) {
+			$out[] = [ 'status' => 'info', 'label' => __( 'XML sitemap', 'heirloom-seo' ), 'detail' => __( 'Enabled, but not served while search engines are discouraged.', 'heirloom-seo' ) ];
+		} else {
+			$out[] = [ 'status' => 'ok', 'label' => __( 'XML sitemap', 'heirloom-seo' ), 'detail' => sprintf( /* translators: %s: URL. */ __( 'Enabled at %s', 'heirloom-seo' ), home_url( '/sitemap.xml' ) ) ];
+		}
 
 		if ( $this->options->bool( 'indexnow.enabled' ) ) {
-			$out[] = '' !== $this->options->str( 'indexnow.key' )
-				? [ 'status' => 'ok', 'label' => __( 'IndexNow', 'heirloom-seo' ), 'detail' => __( 'Enabled with a key.', 'heirloom-seo' ) ]
-				: [ 'status' => 'warn', 'label' => __( 'IndexNow', 'heirloom-seo' ), 'detail' => __( 'Enabled, but no key has been generated.', 'heirloom-seo' ) ];
+			if ( '' === $this->options->str( 'indexnow.key' ) ) {
+				$out[] = [ 'status' => 'warn', 'label' => __( 'IndexNow', 'heirloom-seo' ), 'detail' => __( 'Enabled, but no key has been generated.', 'heirloom-seo' ) ];
+			} elseif ( $discouraged ) {
+				$out[] = [ 'status' => 'info', 'label' => __( 'IndexNow', 'heirloom-seo' ), 'detail' => __( 'Enabled, but nothing is sent while search engines are discouraged.', 'heirloom-seo' ) ];
+			} else {
+				$out[] = [ 'status' => 'ok', 'label' => __( 'IndexNow', 'heirloom-seo' ), 'detail' => __( 'Enabled with a key.', 'heirloom-seo' ) ];
+			}
 		}
 
 		$out[] = [ 'status' => 'ok', 'label' => __( 'AI export safety', 'heirloom-seo' ), 'detail' => __( 'Password-protected and noindex posts are excluded from AI exports.', 'heirloom-seo' ) ];
@@ -57,6 +75,12 @@ final class Audit {
 	/** @return array<int,array{status:string,label:string,detail:string}> */
 	public function httpChecks(): array {
 		$out = [];
+
+		// While search engines are discouraged the sitemap and the IndexNow key
+		// file 404 on purpose, so fetching them would only report false errors.
+		if ( Visibility::discouraged() ) {
+			return $out;
+		}
 
 		if ( $this->options->bool( 'sitemaps.enabled' ) ) {
 			$url      = home_url( '/sitemap.xml' );

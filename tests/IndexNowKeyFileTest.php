@@ -23,7 +23,7 @@ final class IndexNowKeyFileTest extends TestCase {
 		parent::setUp();
 
 		$this->root  = sys_get_temp_dir() . '/heirloom-indexnow-' . bin2hex( random_bytes( 6 ) );
-		$this->store = [];
+		$this->store = [ 'blog_public' => '1' ]; // Settings → Reading: search engines welcome.
 		mkdir( $this->root, 0777, true );
 
 		// In-memory option store.

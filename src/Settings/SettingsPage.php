@@ -10,6 +10,7 @@ use OrchardGrove\HeirloomSeo\Modules\Ai\LlmsTxt;
 use OrchardGrove\HeirloomSeo\Modules\IndexNow\IndexNow;
 use OrchardGrove\HeirloomSeo\Modules\Sitemaps\Sitemaps;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
+use OrchardGrove\HeirloomSeo\Support\Visibility;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -282,18 +283,22 @@ final class SettingsPage implements ModuleInterface {
 	}
 
 	private function renderSidebar(): void {
+		$discouraged = Visibility::discouraged();
 		?>
 		<div class="hseo-card hseo-aside">
 			<h2><?php esc_html_e( 'At a glance', 'heirloom-seo' ); ?></h2>
 			<ul class="hseo-links">
-				<?php if ( $this->options->bool( 'sitemaps.enabled' ) ) : ?>
+				<?php if ( $discouraged ) : ?>
+					<li><a href="<?php echo esc_url( admin_url( 'options-reading.php' ) ); ?>"><span class="dashicons dashicons-hidden" aria-hidden="true"></span><?php esc_html_e( 'Search engines are discouraged (Settings → Reading), so sitemaps and llms.txt are off', 'heirloom-seo' ); ?></a></li>
+				<?php endif; ?>
+				<?php if ( ! $discouraged && $this->options->bool( 'sitemaps.enabled' ) ) : ?>
 					<li><a href="<?php echo esc_url( home_url( '/sitemap.xml' ) ); ?>" target="_blank" rel="noopener"><span class="dashicons dashicons-networking" aria-hidden="true"></span><?php esc_html_e( 'View XML sitemap', 'heirloom-seo' ); ?></a></li>
 					<?php if ( $this->options->bool( 'sitemaps.news_enabled' ) ) : ?>
 						<li><a href="<?php echo esc_url( home_url( '/news-sitemap.xml' ) ); ?>" target="_blank" rel="noopener"><span class="dashicons dashicons-megaphone" aria-hidden="true"></span><?php esc_html_e( 'View Google News sitemap', 'heirloom-seo' ); ?></a></li>
 					<?php endif; ?>
 				<?php endif; ?>
 				<li><a href="<?php echo esc_url( home_url( '/robots.txt' ) ); ?>" target="_blank" rel="noopener"><span class="dashicons dashicons-visibility" aria-hidden="true"></span><?php esc_html_e( 'View robots.txt', 'heirloom-seo' ); ?></a></li>
-				<?php if ( $this->options->bool( 'ai.llms_enabled' ) ) : ?>
+				<?php if ( ! $discouraged && $this->options->bool( 'ai.llms_enabled' ) ) : ?>
 					<li><a href="<?php echo esc_url( home_url( '/llms.txt' ) ); ?>" target="_blank" rel="noopener"><span class="dashicons dashicons-media-text" aria-hidden="true"></span><?php esc_html_e( 'View llms.txt', 'heirloom-seo' ); ?></a></li>
 				<?php endif; ?>
 			</ul>
@@ -353,7 +358,7 @@ final class SettingsPage implements ModuleInterface {
 				break;
 
 			case 'titles':
-				$this->help( __( 'Variables: %title% %sitename% %tagline% %sep% %term_title% %author% %archive_title% %search% %category% %page% %excerpt%', 'heirloom-seo' ) );
+				$this->help( __( 'Variables: %title% %sitename% %tagline% %sep% %term_title% %author% %archive_title% %search% %category% %page% %pagination% %excerpt% (%page% is the page number; %pagination% is "– Page 2 of 5" from page 2 on)', 'heirloom-seo' ) );
 				$this->inputRow( __( 'Front page', 'heirloom-seo' ), 'titles.front' );
 				$this->inputRow( __( 'Posts page', 'heirloom-seo' ), 'titles.home' );
 				$this->inputRow( __( 'Posts', 'heirloom-seo' ), 'titles.post' );
@@ -511,11 +516,15 @@ final class SettingsPage implements ModuleInterface {
 		?>
 		<hr />
 		<h2><?php esc_html_e( 'Maintenance', 'heirloom-seo' ); ?></h2>
+		<?php if ( Visibility::discouraged() ) : ?>
+			<p class="description"><?php esc_html_e( 'Search engines are discouraged (Settings → Reading), so the sitemaps aren’t served until that’s unticked.', 'heirloom-seo' ); ?></p>
+		<?php else : ?>
 		<p>
 			<a href="<?php echo esc_url( $sitemap ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $sitemap ); ?></a>
 			&nbsp;·&nbsp;
 			<a href="<?php echo esc_url( $news ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $news ); ?></a>
 		</p>
+		<?php endif; ?>
 		<p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline">
 				<?php wp_nonce_field( 'heirloom_seo_flush_cache' ); ?>
@@ -1070,7 +1079,11 @@ final class SettingsPage implements ModuleInterface {
 
 	private function aiPreviewLinks(): void {
 		echo '<tr><th scope="row">' . esc_html__( 'Preview', 'heirloom-seo' ) . '</th><td>';
-		echo '<a href="' . esc_url( home_url( '/llms.txt' ) ) . '" target="_blank" rel="noopener">llms.txt</a>';
+		if ( Visibility::discouraged() ) {
+			echo '<span class="description">' . esc_html__( 'Not served while search engines are discouraged (Settings → Reading).', 'heirloom-seo' ) . '</span>';
+		} else {
+			echo '<a href="' . esc_url( home_url( '/llms.txt' ) ) . '" target="_blank" rel="noopener">llms.txt</a>';
+		}
 		echo '</td></tr>';
 	}
 

@@ -19,7 +19,7 @@ use WP_Query;
 require_once __DIR__ . '/Support/WpCli.php';
 
 /**
- * Sitemaps under crawler load (wnd.com, 2026-09-30): every save_post wiped the
+ * Sitemaps under crawler load (2026-09-30): every save_post wiped the
  * whole sitemap cache, pages were ordered newest-modified-first (so every edit
  * reshuffled every page), each page cost a filesort plus a couple of queries
  * per post, and nothing capped concurrent builds — a crawler fetching hundreds
@@ -114,6 +114,7 @@ final class SitemapsTest extends TestCase {
 				],
 			],
 			'permalink_structure' => '/%year%/%monthnum%/%postname%/',
+			'blog_public'         => '1', // Settings → Reading: search engines welcome.
 		];
 		$this->primed       = [];
 		$this->primedTerms  = [];
@@ -346,6 +347,29 @@ final class SitemapsTest extends TestCase {
 		self::assertSame( [ null, false ], FileCache::lookup( 'sub_pt_post_5', 0 ) );
 		self::assertSame( [], $this->db->held );
 		self::assertSame( [], $this->db->ran( 'SELECT COUNT(*)' ), 'F13: the empty ID page says so — no count' );
+	}
+
+	public function test_nothing_is_served_while_search_engines_are_discouraged(): void {
+		$this->seed( 3 );
+		FileCache::put( 'sub_pt_post_1', '<cached/>' . Sitemaps::FORMAT_MARK );
+		$this->store['blog_public'] = '0'; // Settings → Reading: "Discourage search engines".
+
+		foreach ( [ [ 'index', '', 0 ], [ 'sub', 'pt_post', 1 ], [ 'sub', 'pt_post', 2 ], [ 'news', '', 0 ] ] as [ $which, $type, $page ] ) {
+			self::assertSame( [ 'status' => 404, 'body' => '', 'max_age' => 0 ], $this->sitemaps()->respond( $which, $type, $page ), "$which $type $page" );
+		}
+		self::assertSame( [], $this->db->queries, 'nothing built or counted' );
+		self::assertSame( [], WP_Query::$built );
+		self::assertTrue( $this->isFresh( 'sub_pt_post_1' ), 'the cached copy is kept for when the setting is unticked' );
+		self::assertSame( [ null, false ], FileCache::lookup( 'sub_pt_post_2', 0 ), 'nothing was cached' );
+
+		$this->store['blog_public'] = '1';
+		self::assertSame( '<cached/>' . Sitemaps::FORMAT_MARK, $this->sitemaps()->respond( 'sub', 'pt_post', 1 )['body'], 'served again as soon as it is unticked' );
+		self::assertSame( 200, $this->sitemaps()->respond( 'sub', 'pt_post', 2 )['status'] );
+	}
+
+	public function test_an_unknown_sitemap_stays_unknown_while_discouraged(): void {
+		$this->store['blog_public'] = '0';
+		self::assertNull( $this->sitemaps()->respond( 'nonsense', '', 0 ), 'not a sitemap URL at all — left to WordPress' );
 	}
 
 	public function test_gate_fails_open_when_named_locks_are_unavailable(): void {
@@ -1710,6 +1734,116 @@ final class SitemapsTest extends TestCase {
 		self::assertStringNotContainsString( '/p/103/', $two );
 		self::assertStringContainsString( '/p/104/', $two );
 		self::assertStringContainsString( '/p/105/', $three, 'later pages do not move up' );
+	}
+
+	// --- Yoast SEO's sitemap URLs ------------------------------------------
+
+	/**
+	 * A site that switched from Yoast still had /sitemap_index.xml in its old
+	 * robots.txt and in Search Console, and Yoast's per-type names
+	 * (post-sitemap.xml, post-sitemap2.xml …) in crawlers' queues. Heirloom had
+	 * no route for any of them, so the theme answered 404. Each now 301s to the
+	 * sitemap here with the same type and page, or to the index.
+	 */
+	public function test_yoast_sitemap_urls_redirect_to_the_matching_sitemap(): void {
+		$this->seed( 3 ); // Two post pages at 2 per page.
+		$this->store[ Options::OPTION ]['sitemaps']['authors'] = true;
+		Functions\when( 'get_taxonomies' )->justReturn( [ 'category' => 'category' ] ); // Two terms: one page.
+
+		$cases = [
+			'sitemap_index.xml'      => [ '', 1, '/sitemap.xml' ],
+			'post-sitemap.xml'       => [ 'post', 1, '/sitemap-pt_post-1.xml' ],
+			'post-sitemap2.xml'      => [ 'post', 2, '/sitemap-pt_post-2.xml' ],
+			'post-sitemap3.xml'      => [ 'post', 3, '/sitemap.xml' ], // Past the last page here.
+			'category-sitemap.xml'   => [ 'category', 1, '/sitemap-tax_category-1.xml' ],
+			'category-sitemap2.xml'  => [ 'category', 2, '/sitemap.xml' ],
+			'author-sitemap.xml'     => [ 'author', 1, '/sitemap-author-1.xml' ],
+			'page-sitemap.xml'       => [ 'page', 1, '/sitemap.xml' ], // Not a post type this site has.
+			'attachment-sitemap.xml' => [ 'attachment', 1, '/sitemap.xml' ], // Never listed here.
+			'video-sitemap.xml'      => [ 'video', 1, '/sitemap.xml' ], // A Yoast add-on's sitemap.
+		];
+		foreach ( $cases as $url => [ $type, $page, $path ] ) {
+			self::assertSame(
+				[ 'status' => 301, 'body' => '', 'max_age' => 900, 'location' => 'https://example.com' . $path ],
+				$this->sitemaps()->redirect( $type, $page ),
+				$url
+			);
+		}
+
+		$this->store[ Options::OPTION ]['sitemaps']['authors'] = false;
+		self::assertSame( 'https://example.com/sitemap.xml', $this->sitemaps()->redirect( 'author', 1 )['location'], 'author sitemap off here' );
+		self::assertSame( [], FileCache::keys( 'sub_' ), 'a redirect builds nothing' );
+		self::assertSame( [], $this->db->ran( 'SELECT ID FROM' ) );
+	}
+
+	public function test_yoast_sitemap_urls_are_the_sitemaps_404_while_search_engines_are_discouraged(): void {
+		$this->seed( 3 );
+		$this->store['blog_public'] = '0';
+
+		foreach ( [ [ '', 1 ], [ 'post', 1 ], [ 'post', 2 ], [ 'video', 1 ] ] as [ $type, $page ] ) {
+			self::assertSame( $this->sitemaps()->respond( 'index', '', 0 ), $this->sitemaps()->redirect( $type, $page ), "{$type} {$page}" );
+		}
+		self::assertSame( [ 'status' => 404, 'body' => '', 'max_age' => 0 ], $this->sitemaps()->redirect( '', 1 ) );
+		self::assertSame( [], $this->db->queries, 'nothing counted' );
+
+		$this->store['blog_public'] = '1';
+		self::assertSame( 301, $this->sitemaps()->redirect( '', 1 )['status'], 'redirected again as soon as it is unticked' );
+	}
+
+	/** Matched the way WP::parse_request() does: each rule in the order added, anchored at the start of the path. */
+	public function test_yoast_sitemap_urls_route_to_the_redirect_and_ours_stay_ours(): void {
+		$rules = [];
+		Functions\when( 'add_rewrite_rule' )->alias(
+			static function ( $regex, $query ) use ( &$rules ) {
+				$rules[ $regex ] = $query;
+			}
+		);
+		$this->sitemaps()->addRewriteRules();
+
+		$route = static function ( string $path ) use ( &$rules ): array {
+			foreach ( $rules as $regex => $query ) {
+				if ( preg_match( "#^{$regex}#", $path, $m ) ) {
+					$query = (string) preg_replace_callback( '/\$matches\[(\d+)\]/', static fn( $r ) => $m[ (int) $r[1] ] ?? '', $query );
+					parse_str( (string) parse_url( $query, PHP_URL_QUERY ), $vars );
+					return $vars;
+				}
+			}
+			return [];
+		};
+		$legacy = static fn( string $type, string $page ): array => [ 'heirloom_sitemap' => 'legacy', 'heirloom_sm_type' => $type, 'heirloom_sm_page' => $page ];
+
+		self::assertSame( [ 'heirloom_sitemap' => 'legacy' ], $route( 'sitemap_index.xml' ) );
+		self::assertSame( $legacy( 'post', '' ), $route( 'post-sitemap.xml' ) );
+		self::assertSame( $legacy( 'post', '2' ), $route( 'post-sitemap2.xml' ) );
+		self::assertSame( $legacy( 'post_tag', '' ), $route( 'post_tag-sitemap.xml' ) );
+		self::assertSame( $legacy( 'product_cat', '12' ), $route( 'product_cat-sitemap12.xml' ) );
+		self::assertSame( [ 'heirloom_sitemap' => 'news' ], $route( 'news-sitemap.xml' ), 'the News sitemap is served, not redirected' );
+		self::assertSame( [ 'heirloom_sitemap' => 'index' ], $route( 'sitemap.xml' ) );
+		self::assertSame( [ 'heirloom_sitemap' => 'sub', 'heirloom_sm_type' => 'pt_post', 'heirloom_sm_page' => '2' ], $route( 'sitemap-pt_post-2.xml' ) );
+		self::assertSame( [], $route( 'blog/post-sitemap.xml' ), 'only at the site root' );
+	}
+
+	public function test_a_yoast_sitemap_redirect_skips_the_main_query_and_expires(): void {
+		$main                                = new WP_Query();
+		$main->main                          = true;
+		$main->query_vars['heirloom_sitemap'] = 'legacy';
+		self::assertSame( [], $this->sitemaps()->skipMainQuery( null, $main ) );
+
+		self::assertSame(
+			[ 'Location: https://example.com/sitemap.xml', 'Cache-Control: public, max-age=900', 'X-Accel-Expires: 900', 'X-Redirect-By: Heirloom SEO' ],
+			Sitemaps::responseHeaders( [ 'status' => 301, 'body' => '', 'max_age' => 900, 'location' => 'https://example.com/sitemap.xml' ] ),
+			'never a 301 without an expiry: browsers would keep it after a switch back to Yoast, whose /sitemap.xml redirects the other way'
+		);
+	}
+
+	public function test_a_failed_count_sends_a_yoast_url_to_the_index_for_a_minute(): void {
+		Functions\when( 'get_taxonomies' )->justReturn( [ 'category' => 'category' ] );
+		$this->failing['wp_count_terms'] = true;
+
+		self::assertSame(
+			[ 'status' => 301, 'body' => '', 'max_age' => 60, 'location' => 'https://example.com/sitemap.xml' ],
+			$this->sitemaps()->redirect( 'category', 1 )
+		);
 	}
 
 	// --- Helpers ----------------------------------------------------------

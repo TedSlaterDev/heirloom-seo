@@ -6,6 +6,7 @@ namespace OrchardGrove\HeirloomSeo\Modules\Ai;
 use OrchardGrove\HeirloomSeo\ModuleInterface;
 use OrchardGrove\HeirloomSeo\Settings\Options;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
+use OrchardGrove\HeirloomSeo\Support\Visibility;
 use WP_Post;
 
 defined( 'ABSPATH' ) || exit;
@@ -82,6 +83,18 @@ final class LlmsTxt implements ModuleInterface {
 	public function maybeServe(): void {
 		if ( '' === (string) get_query_var( self::QV ) ) {
 			return;
+		}
+
+		// Search engines discouraged (Settings → Reading): no map of the site's URLs.
+		if ( Visibility::discouraged() ) {
+			if ( ! headers_sent() ) {
+				status_header( 404 );
+				header( 'X-Robots-Tag: noindex', true );
+				foreach ( Visibility::NOT_FOUND_HEADERS as $header ) {
+					header( $header );
+				}
+			}
+			exit;
 		}
 
 		$body = FileCache::get( 'llms' );
@@ -279,10 +292,12 @@ final class LlmsTxt implements ModuleInterface {
 
 	/**
 	 * Reconcile the physical /llms.txt with current settings: write it when
-	 * llms.txt is enabled and the root is usable, else remove the one we own.
+	 * llms.txt is enabled and the root is usable (and search engines aren't
+	 * discouraged), else remove the one we own. Also runs when the Settings →
+	 * Reading visibility changes (Plugin::onVisibilityChanged).
 	 */
 	public static function sync( Options $options ): void {
-		if ( ! $options->bool( 'ai.llms_enabled' ) ) {
+		if ( ! $options->bool( 'ai.llms_enabled' ) || Visibility::discouraged() ) {
 			self::deleteStaticFile();
 			delete_option( self::FAILED_OPTION );
 			delete_option( self::DIRTY_OPTION );
@@ -352,6 +367,11 @@ final class LlmsTxt implements ModuleInterface {
 		foreach ( glob( $dir . '/.heirloom-llms-*.tmp' ) ?: [] as $stale ) {
 			@unlink( $stale ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
 		}
+	}
+
+	/** True while a physical /llms.txt Heirloom wrote is on record. */
+	public static function ownsStaticFile(): bool {
+		return (bool) get_option( self::OWNED_OPTION );
 	}
 
 	/** Remove the physical /llms.txt — but only the one we created, and only if it's actually gone. */

@@ -193,6 +193,7 @@ final class Meta implements ModuleInterface {
 			'%search%'        => get_search_query(),
 			'%category%'      => $post ? $this->primaryCategoryName( $post ) : '',
 			'%page%'          => $context->isPaged() ? (string) $context->pageNumber() : '',
+			'%pagination%'    => $this->pagination( $context, $sep ),
 			'%excerpt%'       => $post ? wp_strip_all_tags( get_the_excerpt( $post ) ) : '',
 		];
 
@@ -206,6 +207,21 @@ final class Meta implements ModuleInterface {
 		}
 
 		return trim( $out );
+	}
+
+	/**
+	 * %pagination%: "– Page 2 of 5" (separator first) from page 2 on, nothing on
+	 * page 1 or when the page count is unknown. The same text Yoast SEO's
+	 * %%page%% prints, so titles carried over from Yoast don't change.
+	 */
+	private function pagination( Context $context, string $sep ): string {
+		$page  = $context->pageNumber();
+		$pages = $context->pageCount();
+		if ( $page < 2 || $pages < 2 ) {
+			return '';
+		}
+		/* translators: 1: current page number, 2: total number of pages. */
+		return $sep . ' ' . sprintf( __( 'Page %1$d of %2$d', 'heirloom-seo' ), $page, $pages );
 	}
 
 	/**

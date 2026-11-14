@@ -5,12 +5,14 @@ namespace OrchardGrove\HeirloomSeo\Cli;
 
 use OrchardGrove\HeirloomSeo\Audit\Audit;
 use OrchardGrove\HeirloomSeo\Migration\Importer;
+use OrchardGrove\HeirloomSeo\Migration\Yoast;
 use OrchardGrove\HeirloomSeo\Migration\YoastRobotsRepair;
 use OrchardGrove\HeirloomSeo\Modules\Ai\LlmsTxt;
 use OrchardGrove\HeirloomSeo\Modules\IndexNow\IndexNow;
 use OrchardGrove\HeirloomSeo\Modules\Sitemaps\Sitemaps;
 use OrchardGrove\HeirloomSeo\Settings\Options;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
+use OrchardGrove\HeirloomSeo\Support\Visibility;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -61,6 +63,9 @@ final class Commands {
 		FileCache::ensureDir();
 		if ( ! wp_is_writable( FileCache::dir() ) ) {
 			\WP_CLI::error( 'Can\'t write the sitemap cache (' . FileCache::dir() . '). Run this as the web server\'s user.' );
+		}
+		if ( Visibility::discouraged() ) {
+			\WP_CLI::warning( 'Search engines are discouraged (Settings → Reading), so the sitemaps aren\'t served until that\'s unticked. Building the cache anyway.' );
 		}
 
 		$sitemaps = new Sitemaps( $options );
@@ -122,6 +127,10 @@ final class Commands {
 	 * Submit a post URL to IndexNow.
 	 *
 	 * ## OPTIONS
+	 *
+	 * <action>
+	 * : Only "submit".
+	 *
 	 * [--post=<id>]
 	 * : The post ID to submit.
 	 *
@@ -143,16 +152,29 @@ final class Commands {
 		if ( ! $url ) {
 			\WP_CLI::error( 'No permalink for that post.' );
 		}
-		$ok = ( new IndexNow( new Options() ) )->submitNow( [ (string) $url ] );
+		if ( Visibility::discouraged() ) {
+			\WP_CLI::error( 'Search engines are discouraged (Settings → Reading), so nothing is sent to IndexNow.' );
+		}
+		$options = new Options();
+		if ( ! $options->bool( 'indexnow.enabled' ) ) {
+			\WP_CLI::error( 'IndexNow is turned off in Heirloom SEO, so nothing is sent.' );
+		}
+		$ok = ( new IndexNow( $options ) )->submitNow( [ (string) $url ] );
 		if ( $ok ) {
 			\WP_CLI::success( "Submitted to IndexNow: {$url}" );
 		} else {
-			\WP_CLI::error( 'Submit failed — is IndexNow enabled with a key set?' );
+			\WP_CLI::error( 'Submit failed — is an IndexNow key set?' );
 		}
 	}
 
 	/**
 	 * Import per-post SEO data from another plugin.
+	 *
+	 * From Yoast it also carries over the title formats, the title separator and
+	 * the site verification codes, and turns off the RSS attribution line if
+	 * Yoast's RSS text was empty. A title format or separator already edited in
+	 * Heirloom SEO, a code entered there, or an RSS attribution setting saved
+	 * there, stays.
 	 *
 	 * ## OPTIONS
 	 * <source>
@@ -184,8 +206,17 @@ final class Commands {
 
 		$overwrite = isset( $assoc['overwrite'] );
 		$dry_run   = isset( $assoc['dry-run'] );
-		$importer  = new Importer();
-		$progress  = \WP_CLI\Utils\make_progress_bar( "Importing from {$source->label()}", $total );
+		if ( $source instanceof Yoast ) {
+			$report = Yoast::carryOverReport( Yoast::carryOverSettings( $dry_run ), $dry_run );
+			foreach ( $report['notes'] as $note ) {
+				\WP_CLI::log( $note );
+			}
+			foreach ( $report['warnings'] as $warning ) {
+				\WP_CLI::warning( $warning );
+			}
+		}
+		$importer = new Importer();
+		$progress = \WP_CLI\Utils\make_progress_bar( "Importing from {$source->label()}", $total );
 
 		$offset   = 0;
 		$limit    = 200;

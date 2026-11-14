@@ -8,6 +8,7 @@ use OrchardGrove\HeirloomSeo\Admin\Metabox;
 use OrchardGrove\HeirloomSeo\Audit\Screen;
 use OrchardGrove\HeirloomSeo\Cli\Commands;
 use OrchardGrove\HeirloomSeo\Migration\Ajax;
+use OrchardGrove\HeirloomSeo\Migration\Yoast;
 use OrchardGrove\HeirloomSeo\Modules\Breadcrumbs\Breadcrumbs;
 use OrchardGrove\HeirloomSeo\Modules\Cleanup\Cleanup;
 use OrchardGrove\HeirloomSeo\Modules\Feed\RssAttribution;
@@ -25,6 +26,7 @@ use OrchardGrove\HeirloomSeo\Settings\Options;
 use OrchardGrove\HeirloomSeo\Settings\SettingsPage;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
 use OrchardGrove\HeirloomSeo\Support\Images;
+use OrchardGrove\HeirloomSeo\Support\Visibility;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -115,6 +117,14 @@ final class Plugin {
 		// however they're written (settings page, WP-CLI, code).
 		add_action( 'add_option_' . Options::OPTION, static fn( $name, $value ) => SettingsPage::onSettingsWritten( [], $value ), 10, 2 );
 		add_action( 'update_option_' . Options::OPTION, [ SettingsPage::class, 'onSettingsWritten' ], 10, 2 );
+		// Settings → Reading "Discourage search engines" ticked or unticked: remove
+		// or restore the physical /llms.txt and IndexNow key file right away.
+		add_action( 'add_option_blog_public', [ $this, 'onVisibilityChanged' ] );
+		add_action( 'update_option_blog_public', [ $this, 'onVisibilityChanged' ] );
+		// It can also change with no blog_public write (a database copied to a
+		// staging site, a direct SQL update, a pre_option_blog_public filter), so
+		// back-end requests catch up. Public sites pay one autoloaded option read.
+		add_action( 'admin_init', [ $this, 'reconcileVisibility' ] );
 		if ( is_admin() ) {
 			add_action( 'admin_notices', [ IndexNow::class, 'maybeAdminNotice' ] );
 		}
@@ -192,8 +202,32 @@ final class Plugin {
 		IndexNow::sync( new Options() );
 	}
 
+	/**
+	 * Search engine visibility changed (blog_public written). Both static files
+	 * follow it: removed while discouraged, rewritten when it is unticked. The
+	 * llms.txt build needs post types (registered on `init`), so a write before
+	 * that is deferred to the usual admin_init / wp-cron rebuild.
+	 */
+	public function onVisibilityChanged(): void {
+		IndexNow::sync( new Options() );
+		if ( did_action( 'init' ) ) {
+			LlmsTxt::sync( new Options() );
+		} else {
+			LlmsTxt::markDirty();
+		}
+	}
+
+	/** On back-end requests: while discouraged, a static file still on record goes. */
+	public function reconcileVisibility(): void {
+		if ( Visibility::discouraged() && ( IndexNow::ownsStaticFile() || LlmsTxt::ownsStaticFile() ) ) {
+			$this->onVisibilityChanged();
+		}
+	}
+
 	public static function activate(): void {
-		( new Options() )->seedDefaults();
+		if ( ( new Options() )->seedDefaults() ) {
+			Yoast::carryOverSettings(); // First activation: keep the feed as Yoast left it.
+		}
 		FileCache::ensureDir();
 		update_option( 'heirloom_seo_needs_flush', '1' );
 		LlmsTxt::markDirty();

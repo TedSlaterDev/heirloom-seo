@@ -126,4 +126,18 @@ final class Context {
 	public function isPaged(): bool {
 		return $this->pageNumber() > 1;
 	}
+
+	/**
+	 * How many pages there are: a single post or page's <!--nextpage--> pages,
+	 * else the main query's (archives, the posts page, a front page of posts).
+	 * 0 when unknown.
+	 */
+	public function pageCount(): int {
+		$post = $this->post();
+		if ( $post && PageType::Home !== $this->type() ) {
+			return substr_count( (string) $post->post_content, '<!--nextpage-->' ) + 1;
+		}
+		$query = $GLOBALS['wp_query'] ?? null;
+		return is_object( $query ) && isset( $query->max_num_pages ) ? (int) $query->max_num_pages : 0;
+	}
 }

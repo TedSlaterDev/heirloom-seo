@@ -15,7 +15,7 @@ use WP_Post;
 
 /**
  * Share-image resolution cost. attachment_url_to_postid() is an unindexed
- * meta_value scan (330–400 ms on wnd.com's 11.9M-row postmeta), and og:image,
+ * meta_value scan (330–400 ms on an 11.9M-row postmeta), and og:image,
  * twitter:image and the schema #primaryimage each resolve the share image, so a
  * URL-stored default image cost ~1 s on every uncached page without a featured
  * image. The source is now resolved once per request and the answer remembered

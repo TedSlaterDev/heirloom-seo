@@ -12,9 +12,13 @@ $heirloom_seo_option = get_option( 'heirloom_seo', [] );
 
 // The generated /llms.txt is a public serving artifact, not user data — remove it
 // regardless of the data-deletion opt-in (deactivation usually handled it already).
-// Use the path recorded at write time so a filtered (subdirectory) docroot is honored.
+// Use the path recorded at write time, but only if it is this site's own path (the
+// filter honors a subdirectory docroot): a database copied from another install
+// on the same server records that site's path, and its file isn't ours to remove.
 $heirloom_seo_llms = get_option( 'heirloom_seo_llms_static_path' );
-if ( is_string( $heirloom_seo_llms ) && '' !== $heirloom_seo_llms && is_file( $heirloom_seo_llms ) ) {
+if ( is_string( $heirloom_seo_llms ) && '' !== $heirloom_seo_llms
+	&& apply_filters( 'heirloom_seo/llms_static_path', ABSPATH . 'llms.txt' ) === $heirloom_seo_llms
+	&& is_file( $heirloom_seo_llms ) ) {
 	@unlink( $heirloom_seo_llms ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
 }
 delete_option( 'heirloom_seo_llms_static' );
@@ -23,8 +27,12 @@ delete_option( 'heirloom_seo_llms_static_failed' );
 delete_option( 'heirloom_seo_llms_dirty' );
 
 // Same for the IndexNow {key}.txt verification file — a serving artifact, not user data.
+// Same own-path check; the filename is the key.
 $heirloom_seo_indexnow = get_option( 'heirloom_seo_indexnow_static_path' );
-if ( is_string( $heirloom_seo_indexnow ) && '' !== $heirloom_seo_indexnow && is_file( $heirloom_seo_indexnow ) ) {
+$heirloom_seo_key      = is_string( $heirloom_seo_indexnow ) ? basename( $heirloom_seo_indexnow, '.txt' ) : '';
+if ( preg_match( '/^[A-Za-z0-9\-]{8,128}$/', $heirloom_seo_key )
+	&& apply_filters( 'heirloom_seo/indexnow_static_path', ABSPATH . $heirloom_seo_key . '.txt', $heirloom_seo_key ) === $heirloom_seo_indexnow
+	&& is_file( $heirloom_seo_indexnow ) ) {
 	@unlink( $heirloom_seo_indexnow ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
 }
 delete_option( 'heirloom_seo_indexnow_static' );

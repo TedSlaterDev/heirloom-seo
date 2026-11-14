@@ -61,6 +61,13 @@
 						return;
 					}
 					var d = res.data;
+					if ( d.notes && d.notes.length ) {
+						var $notes = $( '<ul class="hseo-migrate-notes"></ul>' );
+						d.notes.forEach( function ( note ) {
+							$notes.append( $( '<li></li>' ).text( note ) );
+						} );
+						$progress.after( $notes );
+					}
 					imported += d.imported;
 					offset = d.offset;
 					var pct = total ? Math.min( 100, Math.round( ( offset / total ) * 100 ) ) : 100;

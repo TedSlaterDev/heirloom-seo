@@ -7,6 +7,7 @@ use OrchardGrove\HeirloomSeo\ModuleInterface;
 use OrchardGrove\HeirloomSeo\Modules\Authors\Authors;
 use OrchardGrove\HeirloomSeo\Settings\Options;
 use OrchardGrove\HeirloomSeo\Support\FileCache;
+use OrchardGrove\HeirloomSeo\Support\Visibility;
 use WP_Post;
 use WP_Query;
 
@@ -19,6 +20,10 @@ defined( 'ABSPATH' ) || exit;
  *   /sitemap.xml                 sitemap index
  *   /sitemap-{provider}-{n}.xml  a provider page (pt_post, tax_category, ...)
  *   /news-sitemap.xml            Google News (posts < 48h in the "News" term)
+ *
+ * Yoast SEO's sitemap URLs (/sitemap_index.xml, /post-sitemap.xml,
+ * /post-sitemap2.xml …; Rank Math uses the same names) 301 to the matching
+ * sitemap here, so an old robots.txt or Search Console entry keeps working.
  *
  * Built to survive crawler bursts on large sites (hundreds of pages requested
  * in the same second):
@@ -57,8 +62,11 @@ final class Sitemaps implements ModuleInterface {
 	 */
 	public const FORMAT_MARK = "<!-- heirloom-seo sitemap format 2 -->\n";
 
+	/** heirloom_sitemap value for another SEO plugin's old sitemap URL (answered with a redirect). */
+	private const LEGACY = 'legacy';
+
 	/** heirloom_sitemap values this module answers. */
-	private const SERVED = [ 'index', 'sub', 'news', 'xsl' ];
+	private const SERVED = [ 'index', 'sub', 'news', 'xsl', self::LEGACY ];
 
 	/** Above this many edited posts of a type in one request, invalidate from the earliest one onward instead of page by page. */
 	private const MAX_TOUCHED = 20;
@@ -142,6 +150,10 @@ final class Sitemaps implements ModuleInterface {
 		add_rewrite_rule( '^sitemap-([^/]+?)-(\d+)\.xml$', 'index.php?heirloom_sitemap=sub&heirloom_sm_type=$matches[1]&heirloom_sm_page=$matches[2]', 'top' );
 		add_rewrite_rule( '^news-sitemap\.xml$', 'index.php?heirloom_sitemap=news', 'top' );
 		add_rewrite_rule( '^sitemap\.xsl$', 'index.php?heirloom_sitemap=xsl', 'top' );
+		// Yoast SEO's names, matched as Yoast matched them. Rules are tried in the
+		// order added, so news-sitemap.xml (which fits the second one) stays ours.
+		add_rewrite_rule( '^sitemap_index\.xml$', 'index.php?heirloom_sitemap=' . self::LEGACY, 'top' );
+		add_rewrite_rule( '^([^/]+?)-sitemap(\d*)\.xml$', 'index.php?heirloom_sitemap=' . self::LEGACY . '&heirloom_sm_type=$matches[1]&heirloom_sm_page=$matches[2]', 'top' );
 	}
 
 	/**
@@ -188,7 +200,12 @@ final class Sitemaps implements ModuleInterface {
 		}
 
 		$type = (string) preg_replace( '/[^a-z0-9_-]/i', '', (string) get_query_var( 'heirloom_sm_type' ) );
-		$page = max( 1, (int) get_query_var( 'heirloom_sm_page' ) );
+		$page = max( 1, (int) get_query_var( 'heirloom_sm_page' ) ); // Yoast's first page has no number.
+
+		if ( self::LEGACY === $which ) {
+			$this->emit( $this->redirect( $type, $page ) );
+			return;
+		}
 
 		$response = $this->respond( $which, $type, $page );
 		if ( null !== $response ) {
@@ -209,6 +226,13 @@ final class Sitemaps implements ModuleInterface {
 		if ( '' === $key ) {
 			return null;
 		}
+		// Search engines discouraged (Settings → Reading): not served, like core's
+		// own sitemaps. The cache keeps being maintained, so it is current again
+		// the moment the setting is unticked. (The XSL stylesheet lists no URLs and
+		// is left alone.)
+		if ( Visibility::discouraged() ) {
+			return [ 'status' => 404, 'body' => '', 'max_age' => 0 ];
+		}
 
 		[ $cached, $fresh ] = FileCache::lookup( $key, $this->ttl( $which, $key ) );
 		if ( $fresh && self::isCurrent( $cached ) ) {
@@ -223,6 +247,55 @@ final class Sitemaps implements ModuleInterface {
 			return [ 'status' => 200, 'body' => $cached, 'max_age' => 60 ];
 		}
 		return [ 'status' => 503, 'body' => "Sitemap is being generated. Please retry shortly.\n", 'max_age' => 0 ];
+	}
+
+	/**
+	 * Answer one of Yoast SEO's sitemap URLs: a 301 to the sitemap here with the
+	 * same type and page, or to the index when there is none (another plugin's
+	 * type, a page past the end, sitemap_index.xml itself). Gated like the
+	 * sitemaps: with the module off there is no route, and while search engines
+	 * are discouraged it is the same 404.
+	 *
+	 * Cached no longer than the index: browsers keep a 301 sent without an
+	 * expiry for good, and a site that switches back to Yoast gets Yoast's
+	 * redirect the other way (/sitemap.xml → /sitemap_index.xml).
+	 *
+	 * @internal Public for tests; maybeServe() is the entry point.
+	 * @param string $type Yoast's type (a post type, a taxonomy or "author"); '' for sitemap_index.xml.
+	 * @param int    $page Yoast's page number; its first page has none (1).
+	 * @return array{status:int,body:string,max_age:int,location?:string}
+	 */
+	public function redirect( string $type, int $page ): array {
+		if ( Visibility::discouraged() ) {
+			return [ 'status' => 404, 'body' => '', 'max_age' => 0 ];
+		}
+		$this->readFailed = false;
+		$path             = $this->legacyPath( $type, $page );
+		return [
+			'status'   => 301,
+			'body'     => '',
+			'max_age'  => $this->readFailed ? 60 : $this->maxAge( 'index' ), // A failed count sent it to the index: look again soon.
+			'location' => home_url( $path ),
+		];
+	}
+
+	/** The sitemap here that a Yoast type and page map to; the index when none matches exactly. */
+	private function legacyPath( string $type, int $page ): string {
+		if ( '' === $type || $page < 1 ) {
+			return '/sitemap.xml';
+		}
+		// Yoast reads a type as a post type first, then a taxonomy, then "author".
+		$providers = [ 'pt_' . $type, 'tax_' . $type ];
+		if ( 'author' === $type ) {
+			$providers[] = 'author';
+		}
+		foreach ( $providers as $provider ) {
+			$pages = $this->pagesFor( $provider );
+			if ( $pages > 0 ) {
+				return $page <= $pages ? "/sitemap-{$provider}-{$page}.xml" : '/sitemap.xml';
+			}
+		}
+		return '/sitemap.xml';
 	}
 
 	/**
@@ -366,7 +439,7 @@ final class Sitemaps implements ModuleInterface {
 		return isset( $GLOBALS['EZSQL_ERROR'] ) && is_array( $GLOBALS['EZSQL_ERROR'] ) ? count( $GLOBALS['EZSQL_ERROR'] ) : 0;
 	}
 
-	/** @param array{status:int,body:string,max_age:int} $response */
+	/** @param array{status:int,body:string,max_age:int,location?:string} $response */
 	private function emit( array $response ): void {
 		if ( ! headers_sent() ) {
 			status_header( $response['status'] );
@@ -387,10 +460,18 @@ final class Sitemaps implements ModuleInterface {
 	 * page of posts).
 	 *
 	 * @internal Public for tests.
-	 * @param array{status:int,body:string,max_age:int} $response
+	 * @param array{status:int,body:string,max_age:int,location?:string} $response
 	 * @return string[]
 	 */
 	public static function responseHeaders( array $response ): array {
+		if ( 301 === $response['status'] ) {
+			return [
+				'Location: ' . ( $response['location'] ?? '' ),
+				'Cache-Control: public, max-age=' . $response['max_age'],
+				'X-Accel-Expires: ' . $response['max_age'],
+				'X-Redirect-By: Heirloom SEO',
+			];
+		}
 		if ( 200 === $response['status'] ) {
 			return [
 				'Content-Type: application/xml; charset=UTF-8',

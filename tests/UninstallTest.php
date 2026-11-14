@@ -61,6 +61,45 @@ final class UninstallTest extends TestCase {
 		$this->assertCount( 2, $this->wpdb->queries );
 	}
 
+	public function testRemovesOnlyStaticFilesAtThisSitesOwnPaths(): void {
+		$root  = sys_get_temp_dir() . '/heirloom-uninstall-files-' . bin2hex( random_bytes( 4 ) );
+		$other = $root . '/other-site';
+		mkdir( $other, 0777, true );
+		$key = 'wdQgcISujjH1ZYq6PI21GXxtZgcpMa8g';
+		Functions\when( 'apply_filters' )->alias(
+			static fn( $hook, $value, ...$args ) => match ( $hook ) {
+				'heirloom_seo/llms_static_path'     => $root . '/llms.txt',
+				'heirloom_seo/indexnow_static_path' => $root . '/' . $args[0] . '.txt',
+				default                             => $value,
+			}
+		);
+		$files = [ "$root/llms.txt", "$root/$key.txt", "$other/llms.txt", "$other/$key.txt" ];
+		foreach ( $files as $file ) {
+			file_put_contents( $file, $key );
+		}
+
+		try {
+			// A database copied from the other site on this server records its paths.
+			$this->store['heirloom_seo_llms_static_path']     = "$other/llms.txt";
+			$this->store['heirloom_seo_indexnow_static_path'] = "$other/$key.txt";
+			$this->uninstall();
+			$this->assertFileExists( "$other/llms.txt" );
+			$this->assertFileExists( "$other/$key.txt" );
+
+			$this->store['heirloom_seo_llms_static_path']     = "$root/llms.txt";
+			$this->store['heirloom_seo_indexnow_static_path'] = "$root/$key.txt";
+			$this->uninstall();
+			$this->assertFileDoesNotExist( "$root/llms.txt" );
+			$this->assertFileDoesNotExist( "$root/$key.txt" );
+		} finally {
+			foreach ( $files as $file ) {
+				@unlink( $file );
+			}
+			@rmdir( $other );
+			@rmdir( $root );
+		}
+	}
+
 	/** Both the value rows and their timeout rows, with LIKE wildcards escaped. */
 	private function transientPurge(): string {
 		$like = static fn( string $prefix ): string => "'" . addcslashes( $prefix, '_%\\' ) . "%'";
